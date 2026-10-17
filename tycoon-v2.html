@@ -142,6 +142,73 @@
   .prestige .pBar i { display: block; height: 100%; width: 0; background: #9b5de5; border-radius: 4px; transition: width .2s; }
   .prestige.ready .pBar i { background: #ffd23f; }
   .prestige .pNeed { text-align: center; font-size: 11px; font-weight: 800; opacity: .7; margin-top: 5px; }
+  /* ============================================================ v2: menu, banner, crate, overlays */
+  .menu { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 7px; z-index: 6; }
+  .menu button { width: 50px; height: 50px; border: 0; border-radius: 14px; background: rgba(22,16,44,.85); color: #fff; font: 900 13px "Trebuchet MS", sans-serif;
+    box-shadow: inset 0 0 0 1.6px rgba(255,255,255,.18), 0 4px 12px rgba(0,0,0,.35); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .menu button small { font-size: 9px; opacity: .7; font-weight: 800; margin-top: 2px; }
+  .menu .mShop { color: #86e29a; font-size: 17px; } .menu .mBook { color: #ffd23f; } .menu .mBag { color: #9fd0ff; }
+  .banner { position: absolute; top: 46px; left: 50%; transform: translateX(-50%) translateY(-80px); z-index: 9; opacity: 0;
+    background: linear-gradient(90deg, rgba(40,20,70,.95), rgba(70,30,100,.95)); border: 1.5px solid #ffd23f; border-radius: 12px;
+    padding: 6px 16px; font: 900 13px "Trebuchet MS", sans-serif; white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+  .banner.show { animation: bannerIn 4.2s ease-in-out forwards; }
+  .banner b { color: #ffd23f; } .banner .sp { color: #ff8ae0; }
+  @keyframes bannerIn { 0% { transform: translateX(-50%) translateY(-80px); opacity: 0; } 10%, 85% { transform: translateX(-50%) translateY(0); opacity: 1; } 100% { transform: translateX(-50%) translateY(-80px); opacity: 0; } }
+  /* crate reveal */
+  .crate { position: absolute; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; flex-direction: column;
+    background: radial-gradient(circle at 50% 45%, rgba(30,16,60,.72), rgba(8,6,18,.92)); pointer-events: auto; }
+  .crate.open { display: flex; }
+  .crBox { width: 128px; height: 112px; position: relative; transition: opacity .3s, transform .3s; }
+  .crBox .crBody { position: absolute; inset: 14px 0 0; border-radius: 12px; background: linear-gradient(#b9843e,#875f28); box-shadow: inset 0 -8px 0 rgba(0,0,0,.25), 0 10px 30px rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center; font: 900 46px "Trebuchet MS", sans-serif; color: #ffe8b0; }
+  .crBox .crLid { position: absolute; left: -4px; right: -4px; top: 0; height: 26px; border-radius: 10px; background: linear-gradient(#d8a054,#b07a34); box-shadow: 0 3px 0 rgba(0,0,0,.25); transform-origin: left center; }
+  .crBox.shake { animation: crShake .12s linear infinite; }
+  .crBox.pop .crLid { animation: crLid .5s ease-out forwards; } .crBox.pop .crBody { animation: crFade .5s ease-out forwards; }
+  @keyframes crShake { 0%,100% { transform: translate(-2px,0) rotate(-1.5deg); } 50% { transform: translate(2px,0) rotate(1.5deg); } }
+  @keyframes crLid { to { transform: translateY(-40px) rotate(-30deg); opacity: 0; } }
+  @keyframes crFade { to { opacity: 0; transform: translateY(12px) scale(.9); } }
+  .crBurst { position: absolute; width: 20px; height: 20px; border-radius: 50%; opacity: 0; }
+  .crBurst.go { animation: crBurst .6s ease-out forwards; }
+  @keyframes crBurst { 0% { opacity: .95; transform: scale(.4); box-shadow: 0 0 40px 20px var(--bc,#ffd23f); } 100% { opacity: 0; transform: scale(9); box-shadow: 0 0 120px 70px var(--bc,#ffd23f); } }
+  .crCard { display: none; flex-direction: column; align-items: center; gap: 8px; }
+  .crCard.show { display: flex; animation: crCard .5s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes crCard { 0% { transform: scale(.3) translateY(30px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+  .crDie { width: 96px; height: 96px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font: 900 46px "Trebuchet MS", sans-serif;
+    color: #10131f; box-shadow: inset 0 -8px 0 rgba(0,0,0,.28), 0 0 40px var(--tc,#fff); }
+  .crDie.shiny { animation: crShiny 1.1s linear infinite; }
+  @keyframes crShiny { 50% { box-shadow: inset 0 -8px 0 rgba(0,0,0,.28), 0 0 70px #fff, 0 0 30px #ffd23f; } }
+  .crName { font: 900 20px "Trebuchet MS", sans-serif; }
+  .crTier { font: 900 13px "Trebuchet MS", sans-serif; letter-spacing: .15em; text-transform: uppercase; }
+  .crHint { position: absolute; bottom: 42px; font: 800 12px "Trebuchet MS", sans-serif; opacity: .65; }
+  /* overlays: book / shop / bag */
+  .overlay { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8,6,18,.6); pointer-events: auto; }
+  .overlay.open { display: flex; }
+  .panel { position: relative; background: rgba(22,16,44,.97); border-radius: 18px; padding: 14px 14px 16px; width: 360px; max-width: 92vw; max-height: 86vh; overflow: auto;
+    box-shadow: 0 16px 48px rgba(0,0,0,.55); }
+  .ovClose { position: absolute; top: 10px; right: 10px; border: 0; width: 28px; height: 28px; border-radius: 9px; background: rgba(255,255,255,.14); color: #fff; font: 900 14px sans-serif; z-index: 2; }
+  .ovHead { font: 900 13px "Trebuchet MS", sans-serif; letter-spacing: .14em; opacity: .65; margin: 0 0 10px 2px; } .ovHead span { color: #ffd23f; opacity: 1; }
+  .ovFoot { font: 800 11px "Trebuchet MS", sans-serif; opacity: .55; margin-top: 9px; text-align: center; }
+  .book { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .bookCell { aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    background: rgba(255,255,255,.05); font: 900 10px "Trebuchet MS", sans-serif; }
+  .bookCell .d { width: 26px; height: 26px; border-radius: 7px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.3); }
+  .bookCell.have .d { box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), 0 0 10px var(--tc); }
+  .bookCell.miss { opacity: .6; } .bookCell.miss .d { background: #2a2f44 !important; }
+  .bookCell small { opacity: .7; font-size: 9px; }
+  .bookRow { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font: 900 11px "Trebuchet MS", sans-serif; letter-spacing: .1em; opacity: .8; margin-top: 4px; }
+  .bookRow .chk { color: #86e29a; } .bookRow i { flex: 1; height: 1px; background: rgba(255,255,255,.1); }
+  .shop { display: flex; flex-direction: column; gap: 8px; }
+  .shopRow { display: flex; align-items: center; gap: 10px; border-radius: 12px; background: rgba(255,255,255,.06); padding: 9px 11px; }
+  .shopRow .si { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; background: rgba(255,255,255,.08); }
+  .shopRow .st { flex: 1; } .shopRow .st b { font: 900 14px "Trebuchet MS", sans-serif; } .shopRow .st small { display: block; font-size: 11px; opacity: .6; font-weight: 700; }
+  .shopRow button { border: 0; border-radius: 10px; background: #2fb36b; color: #06240f; font: 900 13px "Trebuchet MS", sans-serif; padding: 8px 12px; white-space: nowrap; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+  .shopRow button.owned { background: rgba(255,255,255,.12); color: #9fe0b0; }
+  .bag { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .bagCell { aspect-ratio: 1; border-radius: 10px; background: rgba(255,255,255,.05); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+  .bagCell .d { width: 30px; height: 30px; border-radius: 8px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), 0 0 8px var(--tc); font: 900 12px "Trebuchet MS", sans-serif; display: flex; align-items: center; justify-content: center; color: #10131f; }
+  .bagCell.empty { opacity: .4; } .bagCell.sel { outline: 2px solid #ffd23f; }
+  .bagCell .lv { position: absolute; top: 2px; right: 3px; font: 900 9px "Trebuchet MS", sans-serif; color: #ffd23f; }
+  .bagCell .sh { position: absolute; top: 2px; left: 3px; font-size: 10px; }
 </style>
 <script type="importmap">{ "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -150,10 +217,18 @@
 <div id="hud">
   <div class="goal"><div class="gl">NEXT</div><div class="gn" id="goalName"></div><div class="bar"><i id="goalBar"></i></div></div>
   <div class="stats" id="stats"><div data-s="dice"><span>Dice</span><b></b></div><div data-s="combo"><span>Combo</span><b></b></div>
-    <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="best"><span>Best roll</span><b></b></div></div>
+    <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="luck"><span>Luck</span><b></b></div></div>
   <div class="sheet"><h4>LAST ROLL</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
   <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
-  <div class="dev"><button data-dev="cash">+1,000</button><button data-dev="fast">Max speed</button><button data-dev="fill">Fill board</button><button data-dev="sound" class="on">Sound</button></div>
+  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button></div>
+  <!-- menu: open the collection book, shop and storage shelf (both views) -->
+  <div class="menu" id="menu">
+    <button data-menu="shop" class="mShop">R$</button>
+    <button data-menu="book" class="mBook">BOOK<small id="bookN"></small></button>
+    <button data-menu="bag" class="mBag">BAG<small id="bagN"></small></button>
+  </div>
+  <!-- server-wide pull banner (shiny + rare announcements) -->
+  <div class="banner" id="banner"></div>
   <div class="prestige" id="pPanel">
     <div class="pTitle">PRESTIGE</div>
     <div class="pLvls"><span id="pFrom">0</span><em>→</em><b id="pTo">1</b></div>
@@ -164,7 +239,7 @@
   </div>
   <div id="stick"><i></i></div>
   <div class="boardBar">
-    <button class="bDie" data-buy="die"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" data-buy="special"></button>
+    <button class="bDie" data-buy="cell"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" id="barCrate" data-act="crate"></button>
     <button class="bWalk" data-act="walk">Walk away</button>
   </div>
   <!-- powers + shiny: buff chips under the total; power buttons bottom-right (clear of the stick and buy bar) -->
@@ -174,14 +249,17 @@
     <button data-power="overclock" style="--pc:#3f7cf0"><span class="pn">Over<br>clock</span><span class="sweep"></span><span class="num"></span></button>
     <button data-power="surge" style="--pc:#ffd23f"><span class="pn">Surge</span><span class="sweep"></span><span class="num"></span></button>
   </div>
-  <!-- specials picker overlay -->
-  <div class="picker" id="picker">
-    <div class="pkPanel">
-      <div class="pkHead">SPECIAL DICE</div>
-      <button class="pkClose" id="pkClose">✕</button>
-      <div class="pkList" id="pkList"></div>
-    </div>
+  <!-- crate reveal overlay (the moment): shake, burst, the die lands -->
+  <div class="crate" id="crateOv">
+    <div class="crBox" id="crBox"><div class="crLid"></div><div class="crBody">?</div></div>
+    <div class="crBurst" id="crBurst"></div>
+    <div class="crCard" id="crCard"><div class="crDie" id="crDie"></div><div class="crName" id="crName"></div><div class="crTier" id="crTier"></div></div>
+    <div class="crHint" id="crHint"></div>
   </div>
+  <!-- collection book / shop / storage shelf overlays -->
+  <div class="overlay" id="ovBook"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">COLLECTION <span id="bookPct"></span></div><div class="book" id="bookGrid"></div><div class="ovFoot" id="bookFoot"></div></div></div>
+  <div class="overlay" id="ovShop"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">SHOP</div><div class="shop" id="shopList"></div></div></div>
+  <div class="overlay" id="ovBag"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">STORAGE <span id="bagCap"></span></div><div class="bag" id="bagGrid"></div><div class="ovFoot" id="bagFoot">Tap a die to place it on the board · tap two of a kind to merge</div></div></div>
 </div>
 <script type="module">
 import * as THREE from "three";
@@ -277,34 +355,74 @@ plot(0); plot(70);
 // ================================================================ dice
 const COLORS = { red: "#ef4b52", blue: "#3f7cf0", green: "#2fb36b", yellow: "#f5bf1d", purple: "#9b5de5" };
 const CNAMES = Object.keys(COLORS);
+const CNAME = { red: "Red", blue: "Blue", green: "Green", yellow: "Yellow", purple: "Purple" };
 const CELL = 4, DIE = 2.9, TOP = 1.12;
 let N = 5; // board side; the prestige section grows it (5x5 → 6x6 → 7x7). Refer to board size only through N.
+const rnd = n => Math.floor(Math.random() * n);
+
+// ---------- rarity tiers --------------------------------------------------------------------------
+// Each die's traits come from its tier: a bigger die type (more, more-spread faces → larger sums but rarer
+// number chains), a richer material look, and a per-die face multiplier `mult` that scales the die's
+// contribution to every group/chain it joins (so rarity improves how a die combos, not just a flat bonus).
+// `w` is the base crate weight (luck multiplies the rare+ weights at pull time).
+const TIERS = [
+  { id: "common",   name: "Common",    col: "#c3ccda", mult: 1,   sides: 6,  metal: 0,   rough: .55, ei: 0,   w: 1000 },
+  { id: "uncommon", name: "Uncommon",  col: "#5bd977", mult: 1.6, sides: 6,  metal: .12, rough: .45, ei: .18, w: 300 },
+  { id: "rare",     name: "Rare",      col: "#4aa3ff", mult: 2.6, sides: 8,  metal: .5,  rough: .3,  ei: .3,  w: 95 },
+  { id: "epic",     name: "Epic",      col: "#b06bff", mult: 4.2, sides: 10, metal: .45, rough: .28, ei: .55, w: 26 },
+  { id: "legend",   name: "Legendary", col: "#ffcf3f", mult: 7,   sides: 12, metal: .85, rough: .2,  ei: .8,  w: 6 },
+  { id: "mythic",   name: "Mythic",    col: "#ff5bc8", mult: 12,  sides: 20, metal: .6,  rough: .18, ei: 1.1, w: 1 },
+];
+const tierTotal = TIERS.reduce((t, x) => t + x.w, 0);
+// Per-die multiplier from tier and merge level: each merge level adds +50% of the die's tier mult.
+const dieMult = (tier, level) => TIERS[tier].mult * (1 + .5 * (level || 0));
+// A die "kind" (collection entry) is one tier × one colour. 6 tiers × 5 colours = 30 kinds.
+const kindId = (tier, color) => tier + ":" + color;
+const kindName = (tier, color) => TIERS[tier].name + " " + CNAME[color];
+// Six slot face values for a die type. d6 keeps the classic opposite-sum-7 arrangement; bigger dice
+// spread their values wider (bigger sums, chains that match far less often).
+function faceSet(sides) {
+  if (sides === 6) return [3, 4, 1, 6, 2, 5];
+  const out = []; for (let i = 0; i < 6; i++) out.push(Math.round(1 + i * (sides - 1) / 5)); return out;
+}
+
 const PIPS = { 1: [[.5, .5]], 2: [[.28, .28], [.72, .72]], 3: [[.27, .27], [.5, .5], [.73, .73]], 4: [[.28, .28], [.72, .28], [.28, .72], [.72, .72]],
   5: [[.27, .27], [.73, .27], [.5, .5], [.27, .73], [.73, .73]], 6: [[.28, .24], [.72, .24], [.28, .5], [.72, .5], [.28, .76], [.72, .76]] };
-function faceTex(color, n) {
+const faceTexCache = new Map();
+function faceTex(color, v) {
+  const key = color + ":" + v; if (faceTexCache.has(key)) return faceTexCache.get(key);
   const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
   g.fillStyle = COLORS[color]; g.fillRect(0, 0, 128, 128);
   const gr = g.createRadialGradient(46, 40, 8, 64, 64, 96); gr.addColorStop(0, "rgba(255,255,255,.2)"); gr.addColorStop(1, "rgba(0,0,0,.12)");
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  for (const [x, y] of PIPS[n]) {
+  const ink = color === "yellow" ? "#3a2a00" : "#fff";
+  if (v <= 6) for (const [x, y] of PIPS[v]) {
     g.beginPath(); g.arc(x * 128, y * 128 + 2.5, 12.5, 0, 7); g.fillStyle = "rgba(0,0,0,.25)"; g.fill();
-    g.beginPath(); g.arc(x * 128, y * 128, 12.5, 0, 7); g.fillStyle = color === "yellow" ? "#3a2a00" : "#fff"; g.fill();
+    g.beginPath(); g.arc(x * 128, y * 128, 12.5, 0, 7); g.fillStyle = ink; g.fill();
+  } else { // bigger dice show a bold numeral instead of pips
+    g.font = '900 72px "Trebuchet MS", sans-serif'; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillStyle = "rgba(0,0,0,.3)"; g.fillText(v, 64, 68); g.fillStyle = ink; g.fillText(v, 64, 65);
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; faceTexCache.set(key, t); return t;
 }
-// BoxGeometry face order: +x, -x, +y, -y, +z, -z. Opposite faces sum to 7.
-const FACE_AT = [3, 4, 1, 6, 2, 5];
+// BoxGeometry face order: +x, -x, +y, -y, +z, -z. A die's six face values are laid onto these slots;
+// a roll picks a slot and rotates it up.
 const NORMALS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].map(a => new THREE.Vector3(...a));
-const MATS = Object.fromEntries(CNAMES.map(c => [c, FACE_AT.map(n => new THREE.MeshStandardMaterial({ map: faceTex(c, n), roughness: .4 }))]));
 const dieGeo = new RoundedBoxGeometry(DIE, DIE, DIE, 4, .38);
 const UP = new THREE.Vector3(0, 1, 0);
-function upQuat(n, yaw) {
-  const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[FACE_AT.indexOf(n)], UP);
+function upQuatSlot(slot, yaw) {
+  const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[slot], UP);
   return new THREE.Quaternion().setFromAxisAngle(UP, yaw * Math.PI / 2).multiply(q);
 }
-const rnd = n => Math.floor(Math.random() * n);
-// Weighted specials only ever roll 4-6; everything else rolls 1-6.
-const rollFace = d => d && d.special === "weighted" ? 4 + rnd(3) : 1 + rnd(6);
+// Build the six slot materials for a die spec: face textures from its die type, plus the tier's metal /
+// roughness / emissive look. Materials are per-die (so a mythic can shimmer and disposal is clean).
+function dieMaterials(spec) {
+  const T = TIERS[spec.tier], vals = faceSet(T.sides);
+  return vals.map(v => new THREE.MeshStandardMaterial({
+    map: faceTex(spec.color, v), roughness: T.rough, metalness: T.metal,
+    emissive: new THREE.Color(T.col), emissiveIntensity: T.ei * (spec.shiny ? 1.6 : 1),
+  }));
+}
 
 // ================================================================ tweens
 let now = performance.now();
@@ -347,6 +465,30 @@ class Board {
       const t = new THREE.Mesh(new THREE.BoxGeometry(CELL - .3, .12, CELL - .3), m); const p = this.cellPos(i);
       t.position.set(p.x, TOP - .06, p.z); t.receiveShadow = true; this.group.add(t); this.tiles.push(t); this.geo.push(t);
     }
+    this.refreshLocks();
+  }
+  // Center-out cell order; the first `unlockedCount()` cells are the live board.
+  order() { if (this._order && this._orderN === N) return this._order; this._orderN = N;
+    return this._order = [...Array(N * N).keys()].sort((a, b) => d(a) - d(b));
+    function d(i) { const o = (N - 1) / 2, r = Math.floor(i / N) - o, c = i % N - o; return r * r + c * c + (r + c) * .01; } }
+  unlockedCount() { return this.mine ? Math.min(S.cells, N * N) : N * N; }
+  isUnlocked(i) { return this.order().indexOf(i) < this.unlockedCount(); }
+  // Locked cells read as recessed, dark, lidded; unlocked cells are the normal play surface.
+  refreshLocks() {
+    if (!this.tiles) return;
+    this.tiles.forEach((t, i) => {
+      const locked = !this.isUnlocked(i); t.visible = true;
+      t.material.color.setHex(locked ? 0x171c2e : (i + Math.floor(i / N)) % 2 ? 0x2a3656 : 0x25304d);
+      t.position.y = TOP - .06 - (locked ? .22 : 0); t.scale.setScalar(locked ? .82 : 1);
+    });
+  }
+  // Flash the most recently unlocked cell and refresh the lock look; returns that cell index.
+  unlockFx() {
+    this.refreshLocks();
+    const i = this.order()[this.unlockedCount() - 1]; if (i === undefined) return i;
+    const m = this.tiles[i].material;
+    tween(560, e => { m.emissive.setHex(0xffd23f); m.emissiveIntensity = Math.sin(Math.PI * e) * .9; }).then(() => { m.emissive.setHex(0); });
+    SFX.coin(); return i;
   }
   // Remove every die (optionally with a lift-off-and-vanish effect for the prestige reset).
   clearDice(effect) {
@@ -366,18 +508,19 @@ class Board {
   }
   cellPos(i) { const o = (N - 1) / 2; return new THREE.Vector3((i % N - o) * CELL, TOP + DIE / 2, (Math.floor(i / N) - o) * CELL); }
   world(i, dy = 0) { return this.cellPos(i).add(this.group.position).add(new THREE.Vector3(0, dy, 0)); }
-  // Empty cells fill from the middle out, so a growing collection grows the board's center first.
-  emptyCell() {
-    const order = [...Array(N * N).keys()].sort((a, b) => dist(a) - dist(b));
-    return order.find(i => !this.cells[i]);
-    function dist(i) { const o = (N - 1) / 2, r = Math.floor(i / N) - o, c = i % N - o; return r * r + c * c + (r + c) * .01; }
-  }
-  addDie(i, color, drop, special = null) {
-    const mesh = new THREE.Mesh(dieGeo, special ? specialMats(color, special) : MATS[color]); mesh.castShadow = true; mesh.receiveShadow = true;
-    const d = { mesh, color, face: special === "weighted" ? 4 + rnd(3) : 1 + rnd(6), held: false, special };
-    mesh.quaternion.copy(upQuat(d.face, rnd(4)));
+  // First empty UNLOCKED cell, from the middle out (locked cells can't hold dice).
+  emptyCell() { const u = this.unlockedCount(); return this.order().slice(0, u).find(i => !this.cells[i]); }
+  // spec: { tier, color, level, shiny }. Returns the live die object placed on cell i.
+  addDie(i, spec, drop) {
+    const tier = spec.tier | 0, color = spec.color, sides = TIERS[tier].sides;
+    const mesh = new THREE.Mesh(dieGeo, dieMaterials({ tier, color, shiny: spec.shiny })); mesh.castShadow = true; mesh.receiveShadow = true;
+    const base = .82 + (sides - 4) * .022; mesh.scale.setScalar(base); // bigger die type → visibly bigger
+    const vals = faceSet(sides), idx = rnd(6);
+    const d = { mesh, base, tier, color, sides, level: spec.level | 0, shiny: !!spec.shiny,
+      kind: kindId(tier, color), mult: dieMult(tier, spec.level | 0), faceVals: vals, faceIdx: idx, face: vals[idx], held: false };
+    mesh.quaternion.copy(upQuatSlot(idx, rnd(4)));
     const p = this.cellPos(i); mesh.position.copy(p); this.group.add(mesh); this.cells[i] = d;
-    if (special) this.decorate(d, special);
+    if (d.shiny) this.decorateShiny(d);
     if (drop) {
       mesh.position.y = p.y + 28;
       tween(520, e => { mesh.position.y = p.y + 28 * (1 - e * e); }).then(() => {
@@ -397,21 +540,9 @@ class Board {
       return NB.map(([dr, dc]) => [r + dr, c + dc]).filter(([r2, c2]) => r2 >= 0 && r2 < N && c2 >= 0 && c2 < N).map(([r2, c2]) => r2 * N + c2); };
     const on = i => { const d = cells[i]; return d && !d.held ? d : null; };
     const base = i => faces ? faces[i] : cells[i].face;
-    // ---- SPECIAL DICE effects on the faces, resolved before grouping ----
-    //   Mirror shows the highest base face among the dice touching it (its own roll is ignored if it has neighbours).
-    //   Adder adds +1 to every die it touches; two adders on one die stack to +2. Applied after mirrors resolve,
-    //     so an adder next to a mirror bumps the reflected value.
-    const eff = Array(N * N).fill(null);
-    for (let i = 0; i < N * N; i++) if (on(i)) eff[i] = base(i);
-    for (let i = 0; i < N * N; i++) if (on(i) && cells[i].special === "mirror") {
-      const ns = nbrs(i).filter(on); if (ns.length) eff[i] = Math.max(...ns.map(base));
-    }
-    const added = Array(N * N).fill(0);
-    for (let i = 0; i < N * N; i++) if (on(i)) { added[i] = nbrs(i).filter(j => on(j) && cells[j].special === "adder").length; eff[i] += added[i]; }
-    // Wild is a wildcard for BOTH colour and number: it links to any touching die, so it joins and bridges
-    //   groups/chains of different colour or number. Multiplier doubles the points of each group/chain it is a
-    //   member of; two multipliers in one group stack (x4). Weighted is handled at roll time (only rolls 4-6).
-    const live = i => on(i) ? { color: cells[i].color, face: eff[i], wild: cells[i].special === "wild" } : null;
+    // A die contributes (face × its per-die multiplier) to any group/chain sum, so a rarer/levelled die lifts
+    // the whole combo it sits in — placement, not just quantity, is the skill.
+    const live = i => on(i) ? { color: cells[i].color, face: base(i) } : null;
     const flood = same => {
       const seen = new Set(), out = [];
       for (let i = 0; i < N * N; i++) {
@@ -424,19 +555,15 @@ class Board {
     };
     const linksOf = cs => { const set = new Set(cs), out = []; for (const i of cs) for (const j of nbrs(i)) if (j > i && set.has(j)) out.push({ i, j }); return out; };
     const mult = n => 1 + (n - 1) * this.combo;
-    const sumOf = cs => cs.reduce((t, i) => t + eff[i], 0);
-    const bumpOf = cs => cs.reduce((t, i) => t + added[i], 0);
-    const multx = cs => Math.pow(2, cs.filter(i => cells[i].special === "multiplier").length);
-    const colOf = cs => { const d = cs.map(i => cells[i]).find(d => d.special !== "wild"); return d ? d.color : "wild"; };
-    const faceOf = cs => { const i = cs.find(i => cells[i].special !== "wild"); return eff[i != null ? i : cs[0]]; };
-    const colorGroups = flood((x, y) => x.color === y.color || x.wild || y.wild);
+    const sumOf = cs => cs.reduce((t, i) => t + base(i) * cells[i].mult, 0);
+    const colorGroups = flood((x, y) => x.color === y.color);
     const steps = [];
     const loose = colorGroups.filter(g => g.length === 1).flat();
-    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: 1, multx: 1, added: bumpOf(loose), pts: 0, links: [] });
-    const groups = colorGroups.filter(g => g.length > 1).map(cs => ({ kind: "color", color: colOf(cs), cells: cs, sum: sumOf(cs), mult: mult(cs.length), multx: multx(cs), added: bumpOf(cs), links: linksOf(cs) }));
-    const chains = flood((x, y) => x.face === y.face || x.wild || y.wild).filter(g => g.length > 1)
-      .map(cs => ({ kind: "chain", n: faceOf(cs), cells: cs, sum: sumOf(cs), mult: mult(cs.length), multx: multx(cs), added: bumpOf(cs), links: linksOf(cs).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
-    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult * g.multx);
+    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: 1, pts: 0, links: [] });
+    const groups = colorGroups.filter(g => g.length > 1).map(cs => ({ kind: "color", color: cells[cs[0]].color, cells: cs, sum: sumOf(cs), mult: mult(cs.length), links: linksOf(cs) }));
+    const chains = flood((x, y) => x.face === y.face).filter(g => g.length > 1)
+      .map(cs => ({ kind: "chain", n: base(cs[0]), cells: cs, sum: sumOf(cs), mult: mult(cs.length), links: linksOf(cs).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
+    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult);
     if (loose.length) steps[0].pts = Math.round(steps[0].sum * this.pointsMult);
     const byPts = (x, y) => x.pts - y.pts;
     steps.push(...groups.sort(byPts), ...chains.sort(byPts));
@@ -452,7 +579,7 @@ class Board {
     let landed = 0;
     const jobs = this.cells.map((d, i) => {
       if (!d || d.held) return null;
-      const nf = rollFace(d), q0 = d.mesh.quaternion.clone(), q1 = upQuat(nf, rnd(4)), p = this.cellPos(i); d.face = nf;
+      const idx = rnd(6), nf = d.faceVals[idx], q0 = d.mesh.quaternion.clone(), q1 = upQuatSlot(idx, rnd(4)), p = this.cellPos(i); d.faceIdx = idx; d.face = nf;
       const axis = new THREE.Vector3(Math.random() - .5, 0, Math.random() - .5).normalize(), turns = fast ? 0 : 1 + rnd(2);
       const h = fast ? 1.2 : 2.6 + Math.random() * 1.6, dur = fast ? 230 : Math.round((620 + Math.random() * 120) * tsc);
       return tween(dur, e => {
@@ -483,7 +610,7 @@ class Board {
     const el = popAt(at, "", "grp");
     if (el) {
       el.style.setProperty("--c", "#" + new THREE.Color(hex).getHexString());
-      el.innerHTML = st.kind === "loose" ? `${st.sum}<small>loose${st.added > 0 ? ` +${st.added}` : ""}</small>` : `${st.sum}<small>×${fmtMult(st.mult)}${stepExtra(st)}</small>`;
+      el.innerHTML = st.kind === "loose" ? `${fmt(st.sum)}<small>loose</small>` : `${fmt(st.sum)}<small>×${fmtMult(st.mult)}</small>`;
     }
     return el;
   }
@@ -506,7 +633,7 @@ class Board {
     if (this.epoch !== epoch || entry.done) return;
     const st = entry.st;
     this.highlight(st);
-    st.cells.forEach((i, n) => { const d = res.dice[i]; tween(200 * f, e => d.mesh.scale.setScalar(1 + .12 * Math.sin(Math.PI * e)), n * 25 * f); });
+    st.cells.forEach((i, n) => { const d = res.dice[i]; tween(200 * f, e => d.mesh.scale.setScalar(d.base * (1 + .12 * Math.sin(Math.PI * e))), n * 25 * f); });
     entry.el = this.groupPop(st);
     SFX.link(k * 2);
     await wait((st.kind === "loose" ? 500 : 750) * f);
@@ -522,7 +649,7 @@ class Board {
   async playCollapsed(steps, res, budget, epoch) {
     this.pending = steps.map(st => {
       this.highlight(st);
-      st.cells.forEach((i, n) => { const d = res.dice[i]; tween(160, e => d.mesh.scale.setScalar(1 + .1 * Math.sin(Math.PI * e)), n * 12); });
+      st.cells.forEach((i, n) => { const d = res.dice[i]; tween(160, e => d.mesh.scale.setScalar(d.base * (1 + .1 * Math.sin(Math.PI * e))), n * 12); });
       return { el: this.groupPop(st), pts: st.pts, st, done: false };
     });
     SFX.link(2);
@@ -602,8 +729,6 @@ const RIMS = [[0x5c361a, 0, .6], [0xb0703a, .6, .35], [0xc9d2db, .8, .25], [0xf0
 const WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const stepHex = st => st.kind === "chain" ? 0xffe27a : st.kind === "loose" ? 0x9aa6c4
   : COLORS[st.color] ? new THREE.Color(COLORS[st.color]).offsetHSL(0, .1, .12).getHex() : 0xbda7ff;
-// What specials did, for the group pop and the Last roll list: "+N" bumped faces (adder), "×K" doubling (multiplier).
-const stepExtra = st => (st.added > 0 ? ` +${st.added}` : "") + (st.multx > 1 ? ` ×${st.multx}` : "");
 const fmtMult = m => Number.isInteger(m) ? String(m) : m.toFixed(2).replace(/0$/, "");
 const linesEl = () => document.getElementById("lines");
 function sheetStart() { linesEl().innerHTML = ""; sheetTotal(0); }
@@ -611,10 +736,9 @@ function sheetTotal(v) { document.getElementById("sheetTot").textContent = fmt(v
 function sheetLine(st) {
   const name = st.kind === "loose" ? `Loose · ${st.cells.length} ${st.cells.length === 1 ? "die" : "dice"}` : st.kind === "chain" ? `${WORDS[st.cells.length] || st.cells.length} ${st.n}s`
     : `${st.color[0].toUpperCase() + st.color.slice(1)} · ${st.cells.length} dice`;
-  const note = st.added > 0 ? ` <span style="color:#7bd99a">+${st.added}</span>` : "";
   const dot = st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
-  const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${st.sum} × ${fmtMult(st.mult)}${st.multx > 1 ? ` × <span style="color:#b07800">${st.multx}</span>` : ""} = <b>${fmt(st.pts)}</b>`;
-  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}${note}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
+  const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${fmt(st.sum)} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
+  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
   while (linesEl().children.length > 9) linesEl().firstChild.remove();
 }
 function announce(html) {
@@ -624,51 +748,69 @@ function announce(html) {
 }
 function flashStat(k) { const el = document.querySelector(`[data-s=${k}]`); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
 
+// Game state (declared before the boards so their lock-rendering can read S.cells).
+const S = {
+  points: 0, shown: 0, best: 0, earned: [],
+  speedLv: 0, comboLv: 0,              // upgrades (kept from v1): faster rolls, better combos
+  cells: 3,                            // unlocked board cells — scarce, grows one at a time
+  prestige: 0, runPoints: 0,           // prestige resets points/upgrades, keeps dice + collection
+  storage: [],                         // off-board dice specs {tier,color,level,shiny}
+  collection: {},                      // kindId -> { level, count }
+  passes: {},                          // Robux passes owned (see shop)
+  cratesOpened: 0, crateRun: 0, lifetime: 0, // crateRun = crates opened this prestige run (drives crate cost); lifetime points gates the machine
+  serverLuck: 1,                       // a server-luck purchase lifts this for everyone
+};
 const mine = new Board(0, true);
-for (let k = 0; k < 4; k++) mine.addDie(mine.emptyCell(), CNAMES[k % 5], false);
 const theirs = new Board(70, false); theirs.rollMs = 1400;
-for (let k = 0; k < 21; k++) theirs.addDie(theirs.emptyCell(), CNAMES[[0, 0, 1, 2, 2, 3][rnd(6)]], false);
+// The neighbour shows off a plot already stocked with mixed-rarity dice (aspirational flavour, scored like ours).
+for (let k = 0; k < 18; k++) { const t = [0, 0, 0, 1, 1, 2, 2, 3, 4][rnd(9)]; theirs.addDie(theirs.emptyCell(), { tier: t, color: CNAMES[rnd(5)] }, false); }
 
 // ================================================================ economy
-const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0, specials: 0, prestige: 0, runPoints: 0 };
-// Every rule that sets the roll interval, combo bonus or points multiplier adds its factor here; applyStats() pushes
-// the result onto the board. pointsMult multiplies each scored group's points.
-// Prestige hooks in here (see the prestige section): +25% points per level, a higher combo cap, a faster roll floor.
-// Prestige tuning + pure helpers (the rest of the prestige feature is in its own section below).
-// Numbers tuned with scripts/prestige-sim.js: first die ~12s, full 5x5 ~12.5min, caps ~16-17min, first prestige ~18min.
-const PRESTIGE = { base: 900000, rate: 2.8, pointsPer: .25, comboCapPer: 1, rollFloorPer: 60, startDiePer: 1, maxN: 7 };
-const rollFloor = p => Math.max(220, 500 - PRESTIGE.rollFloorPer * p);        // faster floor each level
-const comboCap = p => 5 + PRESTIGE.comboCapPer * p;                           // higher combo cap each level
+// v2 progression: a handful of dice on a scarce board. Cells unlock one at a time (a real cost). The chase is the
+// dice themselves — crate pulls, rarity, a collection to complete — not spamming the board. See the crate, storage,
+// collection and shop sections below. Numbers are tuned with scripts/prestige-sim.js (see that file's report).
+const PRESTIGE = { base: 60000, rate: 2.9, pointsPer: .3, comboCapPer: 1, rollFloorPer: 60, maxN: 7 };
+const rollFloor = p => Math.max(220, 500 - PRESTIGE.rollFloorPer * p);
+const comboCap = p => 5 + PRESTIGE.comboCapPer * p;
 const boardSizeFor = p => Math.min(PRESTIGE.maxN, 5 + (p >= 2 ? 2 : p >= 1 ? 1 : 0)); // 5x5 → 6x6 (p1) → 7x7 (p2)
-const startDice = p => 4 + PRESTIGE.startDiePer * p;                          // one more starting die each level
-const levelThreshold = lv => PRESTIGE.base * Math.pow(PRESTIGE.rate, lv);     // run points for the (lv+1)-th level
+const levelThreshold = lv => PRESTIGE.base * Math.pow(PRESTIGE.rate, lv);
 function runPointsFor(from, target) { let t = 0; for (let lv = from; lv < target; lv++) t += levelThreshold(lv); return t; }
 function levelsReachable(runPoints, from) { let lv = from, t = 0; for (;;) { const need = levelThreshold(lv); if (runPoints < t + need) break; t += need; lv++; } return lv - from; }
+const maxCells = () => N * N;
+// Collection set bonus: completing all five colours of a tier grants a permanent points multiplier. The chase.
+const SET_BONUS = [.05, .08, .12, .2, .35, .6];
+function setComplete(tier) { return CNAMES.every(c => S.collection[kindId(tier, c)]); }
+function collectionMult() { let m = 1; for (let t = 0; t < TIERS.length; t++) if (setComplete(t)) m *= 1 + SET_BONUS[t]; return m; }
+// Current luck: base 1, times server luck, times any active luck boosts (shop). Feeds crate odds + shiny odds.
+function luck() { let l = S.serverLuck; for (const b of buffs) if (b.luck) l *= b.luck; return l; }
 function stats() {
   const s = {
     rollMs: Math.max(rollFloor(S.prestige), Math.round(2000 * Math.pow(.9, S.speedLv))),
     combo: Math.min(comboCap(S.prestige), 1 + .25 * S.comboLv),
-    pointsMult: Math.pow(1 + PRESTIGE.pointsPer, S.prestige),
+    pointsMult: Math.pow(1 + PRESTIGE.pointsPer, S.prestige) * collectionMult() * (S.passes.x2 ? 2 : 1),
   };
-  applyBuffs(s); // powers + shiny die buffs (see the powers + shiny section)
+  applyBuffs(s); // powers + luck/points boosts (see the powers + boosts section)
   return s;
 }
 function applyStats() { const s = stats(); mine.rollMs = s.rollMs; mine.combo = s.combo; mine.pointsMult = s.pointsMult; return s; }
 const COST = {
-  die: () => Math.round(155 * Math.pow(1.32, S.bought)),
-  combo: () => Math.round(560 * Math.pow(1.43, S.comboLv)),
-  speed: () => Math.round(480 * Math.pow(1.5, S.speedLv)),
-  special: () => specialCost(),
+  cell: () => Math.round(140 * Math.pow(1.4, S.cells - 3)),   // unlock one more board cell
+  combo: () => Math.round(260 * Math.pow(1.42, S.comboLv)),   // better combos
+  speed: () => Math.round(300 * Math.pow(1.5, S.speedLv)),    // faster rolls
 };
-const NAMES = { die: "Buy die", combo: "Better combos", speed: "Faster rolls", special: "Special" };
-// Buy caps read the un-buffed base so a running power never flickers the buy buttons.
+const NAMES = { cell: "Unlock cell", combo: "Better combos", speed: "Faster rolls" };
 const baseRollMs = () => Math.max(rollFloor(S.prestige), Math.round(2000 * Math.pow(.9, S.speedLv)));
-const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || baseRollMs() > rollFloor(S.prestige)) && (k !== "combo" || Math.min(comboCap(S.prestige), 1 + .25 * S.comboLv) < comboCap(S.prestige));
+const canBuy = k => (k !== "cell" || S.cells < maxCells()) && (k !== "speed" || baseRollMs() > rollFloor(S.prestige)) && (k !== "combo" || Math.min(comboCap(S.prestige), 1 + .25 * S.comboLv) < comboCap(S.prestige));
 function buy(k) {
-  if (k === "special") { openPicker(); return false; } // the special pad / buy-bar button opens the kind picker
   if (!canBuy(k) || S.points < COST[k]()) { SFX.no(); return false; }
   S.points -= COST[k](); S.shown = Math.min(S.shown, S.points); SFX.buy();
-  if (k === "die") { S.bought++; mine.addDie(mine.emptyCell(), CNAMES[rnd(5)], true); flashStat("dice"); }
+  if (k === "cell") {
+    S.cells++; applyStats(); flashStat("dice");
+    const i = mine.unlockFx(); // light up the newly opened cell
+    const d = S.storage.length ? S.storage.shift() : null; // a stored die drops onto the fresh cell, if you have one
+    if (d && i !== undefined) mine.addDie(i, d, true);
+    renderStorage();
+  }
   if (k === "speed") {
     const was = mine.rollMs; S.speedLv++; applyStats();
     mine.speedFx(); SFX.rev(); flashStat("speed"); announce(`Rolls every ${secs(was)} → <b>${secs(mine.rollMs)}</b>`);
@@ -680,7 +822,7 @@ function buy(k) {
   return true;
 }
 const secs = ms => (ms / 1000).toFixed(ms % 1000 ? (ms % 100 ? 2 : 1) : 1) + "s";
-function earn(v) { S.points += v; S.runPoints += v; S.earned.push([now, v]); } // runPoints = points scored this run (feeds prestige)
+function earn(v) { S.points += v; S.runPoints += v; S.lifetime += v; S.earned.push([now, v]); }
 const fmt = n => n < 1e4 ? Math.floor(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : n < 1e9 ? (n / 1e6).toFixed(2) + "M" : (n / 1e9).toFixed(2) + "B";
 
 // ================================================================ HUD helpers
@@ -711,8 +853,7 @@ function tag(world, html, cls = "") { const el = document.createElement("div"); 
 
 // ================================================================ buy pads
 const pads = [
-  { k: "die", x: -11, z: 17, color: 0x2fb36b }, { k: "combo", x: 11, z: 17, color: 0x9b5de5 }, { k: "speed", x: 18.5, z: 17, color: 0x3f7cf0 },
-  { k: "special", x: -18.5, z: 17, color: 0x8d6cff },
+  { k: "cell", x: -11, z: 17, color: 0x2fb36b }, { k: "combo", x: 11, z: 17, color: 0x9b5de5 }, { k: "speed", x: 18.5, z: 17, color: 0x3f7cf0 },
 ].map(p => {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, .35, 32), new THREE.MeshStandardMaterial({ color: p.color, emissive: p.color, emissiveIntensity: .3 }));
   mesh.position.set(p.x, .55, p.z); mesh.receiveShadow = true; scene.add(mesh);
@@ -748,8 +889,8 @@ function prestigeStatus() {
 function updatePrestigePanel() {
   const st = prestigeStatus(), to = st.to, p = S.prestige;
   pFrom.textContent = p; pTo.textContent = to;
-  const rows = [["Points", "×" + fmtMult(Math.pow(1 + PRESTIGE.pointsPer, to))], ["Combo", "+" + fmtMult(comboCap(to)) + "×"],
-    ["Rolls", "≥" + secs(rollFloor(to))], ["Start", startDice(to) + " dice"]];
+  const rows = [["Points", "×" + fmtMult(Math.pow(1 + PRESTIGE.pointsPer, to))], ["Combo cap", "+" + fmtMult(comboCap(to)) + "×"],
+    ["Rolls", "≥" + secs(rollFloor(to))], ["Dice", "kept"]];
   if (boardSizeFor(to) !== boardSizeFor(p)) rows.push(["Board", `${boardSizeFor(to)}×${boardSizeFor(to)}`]);
   pGains.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
   pBtn.disabled = !st.ready; pPanel.classList.toggle("ready", st.ready);
@@ -780,24 +921,25 @@ async function doPrestige() {
   prestiging = true;
   const newLv = S.prestige + st.avail, oldN = N, grow = boardSizeFor(newLv) !== oldN;
   SFX.rev(); SFX.thunk();
+  // Dice are never lost: every die on the board goes back to storage before the reset.
+  boardToStorage();
   mine.clearDice(true);
   mine.tiles.forEach((t, i) => { const o = (N - 1) / 2, d = Math.hypot(Math.floor(i / N) - o, i % N - o);
     tween(480, e => { t.material.emissive.setHex(0xffd23f); t.material.emissiveIntensity = Math.sin(Math.PI * e) * .9; }, d * 55).then(() => t.material.emissive.setHex(0)); });
   await wait(540);
-  S.prestige = newLv; S.points = 0; S.shown = 0; S.runPoints = 0; S.earned = []; S.bought = 0; S.speedLv = 0; S.comboLv = 0; S.specials = 0;
+  S.prestige = newLv; S.points = 0; S.shown = 0; S.runPoints = 0; S.earned = []; S.speedLv = 0; S.comboLv = 0; S.cells = 3; S.crateRun = 0;
   if (grow) {
     N = boardSizeFor(newLv);
-    const colors = theirs.cells.filter(Boolean).map(d => d.color);
+    const colors = theirs.cells.filter(Boolean).map(d => ({ tier: d.tier, color: d.color }));
     mine.resize(); theirs.resize();
     colors.forEach(c => { const i = theirs.emptyCell(); if (i !== undefined) theirs.addDie(i, c, false); });
     growFx(mine, oldN);
-  }
+  } else { mine.resize(); }
   applyStats();
-  const start = startDice(newLv);
-  for (let k = 0; k < start; k++) { const i = mine.emptyCell(); if (i !== undefined) mine.addDie(i, CNAMES[k % 5], true); }
+  fillBoardFromStorage(); // your kept dice drop back onto the (smaller) board
   SFX.sparkle();
   announce(`Prestige <b>✦${newLv}</b> · points ×<b>${fmtMult(Math.pow(1 + PRESTIGE.pointsPer, newLv))}</b>`);
-  updatePrestigePanel();
+  updatePrestigePanel(); renderStorage();
   prestiging = false;
   return true;
 }
@@ -843,7 +985,7 @@ function enterBoard() {
   mode = "board"; document.body.classList.add("boardView"); SFX.whoosh();
   tween(300, e => { player.position.x += (MAT.x - player.position.x) * e; player.position.z += (MAT.z + .4 - player.position.z) * e; });
 }
-function leaveBoard() { mode = "walk"; matArmed = false; document.body.classList.remove("boardView"); player.position.z = MAT.z + 5; yaw = 0; cancelReplace(); closePicker(); SFX.whoosh(); }
+function leaveBoard() { mode = "walk"; matArmed = false; document.body.classList.remove("boardView"); player.position.z = MAT.z + 5; yaw = 0; SFX.whoosh(); }
 
 // ================================================================ pointer: orbit while walking, drag dice at the board
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -856,7 +998,6 @@ renderer.domElement.addEventListener("pointerdown", e => {
   const meshes = mine.cells.map(d => d && d.mesh).filter(Boolean);
   const h = !mine.tumbling && ray.intersectObjects(meshes)[0]; if (!h) return;
   const from = mine.cells.findIndex(d => d && d.mesh === h.object), d = mine.cells[from];
-  if (replaceKind) { finishReplace(from); return; } // board was full: this tap chooses the die the special replaces
   d.held = true; drag = { id: e.pointerId, from, d, to: from }; SFX.pick();
   renderer.domElement.setPointerCapture(e.pointerId);
 });
@@ -866,7 +1007,8 @@ renderer.domElement.addEventListener("pointermove", e => {
   pointerRay(e); if (!ray.ray.intersectPlane(dragPlane, hit)) return;
   drag.d.mesh.position.set(hit.x, TOP + DIE / 2 + 2.2, hit.z);
   const o = (N - 1) / 2, c = Math.round(hit.x / CELL + o), r = Math.round(hit.z / CELL + o);
-  const to = c >= 0 && c < N && r >= 0 && r < N ? r * N + c : drag.from;
+  const cand = c >= 0 && c < N && r >= 0 && r < N ? r * N + c : drag.from;
+  const to = mine.isUnlocked(cand) ? cand : drag.from; // can't drop onto a locked cell
   if (to !== drag.to) { mine.tiles[drag.to].scale.y = 1; drag.to = to; SFX.tick(2); }
   mine.tiles.forEach((t, i) => t.material.emissive.setHex(i === to ? 0x444444 : t.material.emissive.getHex() === 0x444444 ? 0 : t.material.emissive.getHex()));
 });
@@ -888,9 +1030,9 @@ document.querySelectorAll("[data-buy]").forEach(b => b.addEventListener("click",
 document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
-  if (k === "cash") { S.points += 1000; SFX.coin(); }
-  if (k === "fast") { const on = mine.rollMs > 500; if (on) mine.rollMs = 500; else applyStats(); b.classList.toggle("on", on); }
-  if (k === "fill") { let i; while ((i = mine.emptyCell()) !== undefined) mine.addDie(i, CNAMES[rnd(5)], true); }
+  if (k === "cash") { S.points += 5000; SFX.coin(); }
+  if (k === "crate") openCrate(true);                                 // free crate (test)
+  if (k === "shiny") { crateForce = { shiny: true }; openCrate(true); } // force a shiny pull (test)
   if (k === "sound") { AC.on = !AC.on; b.classList.toggle("on", AC.on); }
 }));
 
@@ -1083,6 +1225,14 @@ function frame(t) {
   }
   mine.tick(); theirs.tick(); prestigeTick(dt);
   powersFrame(dt); // powers cooldowns, buffs, shiny die, Mikey
+  // crate machine: the sample die spins and bobs; glow when affordable
+  cmDie.rotation.y += dt * 1.2; cmDie.position.y = 3.6 + Math.sin(now / 500) * .18;
+  cmTop.material.emissiveIntensity = crateAvailable() && S.points >= crateCost() ? .4 + .35 * Math.sin(now / 220) : .12;
+  crateTag.hidden = !(mode === "walk" && Math.hypot(player.position.x - CRATE_POS.x, player.position.z - CRATE_POS.z) < 15);
+  // auto-open pass: keep pulling whenever a crate is affordable and nothing is mid-reveal
+  if (S.passes.auto && !crateBusy && crateAvailable() && S.points >= crateCost()) openCrate(false);
+  // other "players" pull rares/shinies now and then, so the server feels alive
+  if (now >= nextFake) { nextFake = now + (38 + Math.random() * 46) * 1000; if (!crateBusy) fakePull(); }
 
   if (mode === "walk") {
     let mx = stick.x + ((keys.d || keys.arrowright) ? 1 : 0) - ((keys.a || keys.arrowleft) ? 1 : 0);
@@ -1099,9 +1249,11 @@ function frame(t) {
     if (onMat && matArmed) enterBoard(); if (!onMat) matArmed = true;
     for (const p of pads) {
       const on = Math.hypot(player.position.x - p.x, player.position.z - p.z) < 2.6;
-      if (on && p.armed) { p.armed = false; if (buy(p.k) || p.k === "special") tween(300, e => p.mesh.position.y = .55 - Math.sin(Math.PI * e) * .25); }
+      if (on && p.armed) { p.armed = false; if (buy(p.k)) tween(300, e => p.mesh.position.y = .55 - Math.sin(Math.PI * e) * .25); }
       if (!on) p.armed = true;
     }
+    const onCrate = Math.hypot(player.position.x - CRATE_POS.x, player.position.z - CRATE_POS.z) < 3;
+    if (onCrate && crateArmed) { crateArmed = false; openCrate(false); } if (!onCrate) crateArmed = true;
     const tp = player.position.clone().add(new THREE.Vector3(Math.sin(yaw) * 15, 11, Math.cos(yaw) * 15));
     camPos.lerp(tp, 1 - Math.exp(-dt * 6)); camLook.lerp(player.position.clone().add(new THREE.Vector3(-Math.sin(yaw) * 9, 1.5, -Math.cos(yaw) * 9)), 1 - Math.exp(-dt * 8));
     if (camera.fov !== 50) { camera.fov += (50 - camera.fov) * (1 - Math.exp(-dt * 6)); if (Math.abs(camera.fov - 50) < .05) camera.fov = 50; camera.updateProjectionMatrix(); }
@@ -1128,12 +1280,13 @@ function frame(t) {
     for (const p of pads) {
       const c = COST[p.k](), ok = canBuy(p.k);
       p.t.el.innerHTML = `${NAMES[p.k]}<small>${ok ? fmt(c) : "Maxed"}</small>`; p.t.el.classList.toggle("poor", ok && S.points < c);
-      const btn = document.querySelector(`[data-buy=${p.k}]`); btn.innerHTML = `${NAMES[p.k]}<small>${ok ? fmt(c) : "Maxed"}</small>`; btn.disabled = p.k !== "special" && (!ok || S.points < c); btn.classList.toggle("poor", p.k === "special" && S.points < c);
+      const btn = document.querySelector(`[data-buy=${p.k}]`); btn.innerHTML = `${NAMES[p.k]}<small>${ok ? fmt(c) : "Maxed"}</small>`; btn.disabled = !ok || S.points < c;
     }
+    updateCrateButton();
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
-    st("dice", `${mine.cells.filter(Boolean).length} / ${N * N}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
-    st("speed", `every ${secs(mine.rollMs)}`); st("best", fmt(S.best));
-    const goal = ["die", "combo", "speed"].filter(canBuy).sort((a, b) => COST[a]() - COST[b]())[0], pst = prestigeStatus();
+    st("dice", `${mine.cells.filter(Boolean).length} / ${S.cells}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
+    st("speed", `every ${secs(mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
+    const goal = ["cell", "combo", "speed"].filter(canBuy).sort((a, b) => COST[a]() - COST[b]())[0], pst = prestigeStatus();
     if (pst.ready || !goal) { // everything bought, or the next prestige is the best move → point at prestige
       document.getElementById("goalName").textContent = `Prestige → ✦${pst.to}`;
       document.getElementById("goalBar").style.width = Math.min(100, S.runPoints / pst.need * 100) + "%";
@@ -1145,65 +1298,8 @@ function frame(t) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
-// ================================================================ special dice
-// Five special dice, each adapted to our group/chain scoring (rules live in Board.score()). Unlocked by prestige
-// level (read as (S.prestige || 0); the prestige feature is built in parallel). Cost is the same for every kind at a
-// given time: ceil(120 × 1.6^(specials already owned)). Each kind reads instantly from a floating emblem (a sprite,
-// so it faces both the walk camera and the overhead view), a coloured ground ring (overhead), a glow, and a material
-// tweak — while the die keeps its colour so colour grouping still reads.
-const SPECIAL = {
-  weighted:   { lv: 1, name: "Weighted",   sym: "4-6", col: 0x8a93a6, glow: 0xc3ccda, dark: true },
-  wild:       { lv: 2, name: "Wild",       sym: "ALL", col: 0xffffff, glow: 0xffffff, rainbow: true },
-  adder:      { lv: 3, name: "Adder",      sym: "+1",  col: 0x2fb36b, glow: 0x8df0b4 },
-  mirror:     { lv: 4, name: "Mirror",     sym: "MAX", col: 0x49e0e0, glow: 0xa6f6f6, dark: true },
-  multiplier: { lv: 5, name: "Multiplier", sym: "×2",  col: 0xffd23f, glow: 0xffe27a, dark: true },
-};
-const SKINDS = Object.keys(SPECIAL);
+// ================================================================ die decorations (shiny) + removal
 const hex6 = n => n.toString(16).padStart(6, "0");
-const specialCost = () => Math.ceil(120 * Math.pow(1.6, S.specials));
-
-// --- die materials & decorations ---
-function wildFaceTex(n) {
-  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
-  const grd = g.createLinearGradient(0, 0, 128, 128);
-  ["#ef4b52", "#f5bf1d", "#2fb36b", "#3f7cf0", "#9b5de5"].forEach((col, k, a) => grd.addColorStop(k / (a.length - 1), col));
-  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
-  const sh = g.createRadialGradient(46, 40, 8, 64, 64, 96); sh.addColorStop(0, "rgba(255,255,255,.28)"); sh.addColorStop(1, "rgba(0,0,0,.18)");
-  g.fillStyle = sh; g.fillRect(0, 0, 128, 128);
-  for (const [x, y] of PIPS[n]) {
-    g.beginPath(); g.arc(x * 128, y * 128 + 2.5, 12.5, 0, 7); g.fillStyle = "rgba(0,0,0,.3)"; g.fill();
-    g.beginPath(); g.arc(x * 128, y * 128, 12.5, 0, 7); g.fillStyle = "#fff"; g.fill();
-  }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
-}
-function specialMats(color, kind) {
-  if (kind === "wild") return FACE_AT.map(n => new THREE.MeshStandardMaterial({ map: wildFaceTex(n), roughness: .3, metalness: .2, emissive: new THREE.Color(0x222244), emissiveIntensity: .6 }));
-  const tweak = {
-    weighted:   { metalness: .75, roughness: .3,  emissive: 0x2b3240, ei: .5 },
-    adder:      { metalness: 0,   roughness: .4,  emissive: 0x0f5a33, ei: .6 },
-    mirror:     { metalness: .95, roughness: .12, emissive: 0x0d4a4a, ei: .5 },
-    multiplier: { metalness: .3,  roughness: .35, emissive: 0x6a5300, ei: .7 },
-  }[kind] || {};
-  return MATS[color].map(m => {
-    const c = m.clone();
-    if (tweak.metalness != null) c.metalness = tweak.metalness;
-    if (tweak.roughness != null) c.roughness = tweak.roughness;
-    if (tweak.emissive != null) { c.emissive = new THREE.Color(tweak.emissive); c.emissiveIntensity = tweak.ei || .5; }
-    return c;
-  });
-}
-function badgeTex(kind) {
-  const sp = SPECIAL[kind], W = 256, H = 128, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
-  const pad = 10, r = 56;
-  if (sp.rainbow) { const grd = g.createLinearGradient(0, 0, W, 0); ["#ef4b52", "#f5bf1d", "#2fb36b", "#3f7cf0", "#9b5de5"].forEach((col, k, a) => grd.addColorStop(k / (a.length - 1), col)); g.fillStyle = grd; }
-  else g.fillStyle = "#" + hex6(sp.col);
-  g.beginPath(); g.roundRect(pad, pad, W - 2 * pad, H - 2 * pad, r); g.fill();
-  g.lineWidth = 8; g.strokeStyle = "rgba(0,0,0,.35)"; g.stroke();
-  g.fillStyle = (sp.dark || sp.rainbow) ? "#1a1a2a" : "#fff";
-  g.font = `900 ${sp.sym.length > 2 ? 58 : 72}px "Trebuchet MS", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(sp.sym, W / 2, H / 2 + 4);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
-}
 function glowTex() {
   if (glowTex._t) return glowTex._t;
   const s = 128, c = document.createElement("canvas"); c.width = c.height = s; const g = c.getContext("2d");
@@ -1212,88 +1308,267 @@ function glowTex() {
   g.fillStyle = grd; g.fillRect(0, 0, s, s);
   return glowTex._t = new THREE.CanvasTexture(c);
 }
-Board.prototype.decorate = function (d, kind) {
-  const sp = SPECIAL[kind];
-  const emb = new THREE.Sprite(new THREE.SpriteMaterial({ map: badgeTex(kind), transparent: true, depthTest: true })); emb.scale.set(2.7, 1.35, 1);
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: sp.glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); glow.scale.set(5.2, 5.2, 1);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(CELL * 0.38, .13, 10, 28), new THREE.MeshBasicMaterial({ color: sp.col })); ring.rotation.x = Math.PI / 2;
-  this.group.add(glow, ring, emb);
-  d.emblem = emb; d.glow = glow; d.ring = ring;
+// A shiny die gets a bright additive glow sprite that hovers at it; the die's own emissive also shimmers (below).
+Board.prototype.decorateShiny = function (d) {
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  glow.scale.set(5.6, 5.6, 1); this.group.add(glow); d.glow = glow;
 };
 Board.prototype.updateDecos = function () {
   const t = now;
   for (let i = 0; i < N * N; i++) {
-    const d = this.cells[i]; if (!d || !d.special) continue; const m = d.mesh;
-    if (d.ring) { d.ring.position.set(m.position.x, TOP + .1, m.position.z); d.ring.rotation.z += .03; d.ring.scale.setScalar(1 + .08 * Math.sin(t / 260 + i)); }
-    if (d.emblem) d.emblem.position.set(m.position.x, m.position.y + DIE * .95 + .22 * Math.sin(t / 420 + i), m.position.z);
-    if (d.glow) { d.glow.position.set(m.position.x, m.position.y + DIE * .5, m.position.z); d.glow.material.opacity = .28 + .16 * Math.sin(t / 220 + i); }
-    if (d.special === "wild") { // wild shimmers through the rainbow so "counts as every colour" reads at a glance
-      const col = new THREE.Color().setHSL((t / 1400 + i * .1) % 1, .9, .6);
-      if (Array.isArray(m.material)) m.material.forEach(mm => mm.emissive && mm.emissive.copy(col).multiplyScalar(.4));
-      if (d.ring) d.ring.material.color.copy(col); if (d.glow) d.glow.material.color.copy(col);
+    const d = this.cells[i]; if (!d) continue; const m = d.mesh;
+    if (d.glow) { // shiny halo
+      d.glow.position.set(m.position.x, m.position.y + DIE * .5, m.position.z);
+      const col = new THREE.Color().setHSL((t / 900 + i * .13) % 1, .9, .65);
+      d.glow.material.color.copy(col); d.glow.material.opacity = .4 + .22 * Math.sin(t / 180 + i);
+    }
+    if (d.tier === 5 || d.shiny) { // mythic / shiny dice shimmer so they read as special at a glance
+      const col = new THREE.Color().setHSL((t / 1400 + i * .1) % 1, .85, .6);
+      if (Array.isArray(m.material)) m.material.forEach(mm => mm.emissive && mm.emissive.copy(col).multiplyScalar(d.shiny ? .55 : .4));
     }
   }
 };
 Board.prototype.removeDie = function (i) {
   const d = this.cells[i]; if (!d) return;
   this.group.remove(d.mesh);
-  if (Array.isArray(d.mesh.material) && d.mesh.material !== MATS[d.color]) // normal dice share MATS — only dispose per-die clones
-    d.mesh.material.forEach(m => { if (d.special === "wild" && m.map) m.map.dispose(); m.dispose(); });
-  for (const o of [d.emblem, d.glow, d.ring]) if (o) { this.group.remove(o); if (o.material) { if (o.material.map && o.material.map !== glowTex._t) o.material.map.dispose(); o.material.dispose(); } if (o.geometry) o.geometry.dispose(); }
+  if (Array.isArray(d.mesh.material)) d.mesh.material.forEach(m => m.dispose()); // per-die material clones
+  if (d.glow) { this.group.remove(d.glow); d.glow.material.dispose(); }
   this.cells[i] = null;
 };
+// ================================================================ dice ownership: obtain / storage / merge
+const STORAGE_BASE = 12;
+const storageCap = () => S.passes.bigbag ? 24 : STORAGE_BASE;
+function addToStorage(spec) { S.storage.push({ tier: spec.tier, color: spec.color, level: spec.level | 0, shiny: !!spec.shiny }); }
+// Record a die in the collection, then place it on an empty board cell if there's room, else on the storage shelf.
+function obtainDie(spec, opts = {}) {
+  const id = kindId(spec.tier, spec.color);
+  (S.collection[id] || (S.collection[id] = { count: 0 })).count++;
+  applyStats(); // a newly-completed colour set changes the points multiplier
+  let placed = "storage", cell;
+  if (!opts.forceStorage) { cell = mine.emptyCell(); if (cell !== undefined) { mine.addDie(cell, spec, true); placed = "board"; } }
+  if (placed === "storage") addToStorage(spec);
+  updateMenuCounts();
+  return { placed, cell };
+}
+// Prestige: pull every board die back to storage (dice are never lost), then refill the smaller board best-first.
+function boardToStorage() { for (let i = 0; i < mine.cells.length; i++) { const d = mine.cells[i]; if (d) addToStorage(d); } }
+function fillBoardFromStorage() {
+  S.storage.sort((a, b) => (b.tier - a.tier) || ((b.level | 0) - (a.level | 0)));
+  let i; while (S.storage.length && (i = mine.emptyCell()) !== undefined) mine.addDie(i, S.storage.shift(), true);
+}
 
-// --- buying ---
-let replaceKind = null;
-function buySpecial(kind, cell) {
-  const sp = SPECIAL[kind]; if (!sp) return false;
-  if ((S.prestige || 0) < sp.lv) { SFX.no(); return false; }
-  const cost = specialCost();
-  if (S.points < cost) { SFX.no(); return false; }
-  let i = (cell == null) ? mine.emptyCell() : cell;
-  if (i == null) { closePicker(); startReplace(kind); return "replace"; } // board full: player picks a die to replace
-  S.points -= cost; S.shown = Math.min(S.shown, S.points); S.specials++; SFX.buy();
-  if (mine.cells[i]) mine.removeDie(i);
-  mine.addDie(i, CNAMES[rnd(5)], true, kind);
-  flashStat("dice"); cancelReplace(); closePicker();
-  announce(`<b>${sp.name}</b> added`);
+// ================================================================ crate machine + reveal (the moment)
+const CRATE_UNLOCK = 1600;                // lifetime points before the machine switches on (~3-4 minutes in)
+const SHINY_BASE = 1 / 750;               // shiny chance per pulled die, ×luck
+let crateForce = null, crateBusy = false, crateResolve = null;
+// Crate cost climbs within a prestige run (so filling a board is an arc) but resets each prestige — see sim.
+const crateCost = () => Math.round(420 * Math.pow(1.14, S.crateRun));
+const crateAvailable = () => S.lifetime >= CRATE_UNLOCK;
+// Weighted tier roll; luck multiplies every rare+ weight (tier 0 unchanged) so boosts push you up the ladder.
+function pickTier(l) {
+  const wsum = TIERS.reduce((t, x, i) => t + x.w * (i ? l : 1), 0);
+  let r = Math.random() * wsum;
+  for (let i = 0; i < TIERS.length; i++) { const w = TIERS[i].w * (i ? l : 1); if ((r -= w) < 0) return i; }
+  return 0;
+}
+function rollOne() {
+  const l = luck();
+  let tier = crateForce && crateForce.tier != null ? crateForce.tier : pickTier(l);
+  if (S.cratesOpened === 0) tier = Math.max(tier, 2);        // first crate is a good pull (Rare+)
+  const shiny = crateForce && crateForce.shiny != null ? crateForce.shiny : Math.random() < SHINY_BASE * l;
+  return { tier, color: CNAMES[rnd(5)], level: 0, shiny };
+}
+// Open 1 crate (or 3 with the pass). Rolls now; reveals the best pull with a shake→burst→card animation; places all.
+function openCrate(free) {
+  if (crateBusy) return null;
+  if (!free) {
+    if (!crateAvailable()) { SFX.no(); return null; }
+    const c = crateCost(); if (S.points < c) { SFX.no(); return null; }
+    S.points -= c; S.shown = Math.min(S.shown, S.points);
+  }
+  const n = S.passes.open3 ? 3 : 1, pulls = [];
+  for (let k = 0; k < n; k++) pulls.push(rollOne());
+  crateForce = null; S.cratesOpened += n; S.crateRun += n;
+  pulls.sort((a, b) => (b.tier - a.tier) || (b.shiny - a.shiny));
+  playCrate(pulls);
+  return pulls[0];
+}
+const C = id => document.getElementById(id);
+function playCrate(pulls) {
+  crateBusy = true;
+  const best = pulls[0], T = TIERS[best.tier];
+  const ov = C("crateOv"), box = C("crBox"), burst = C("crBurst"), card = C("crCard"), hint = C("crHint");
+  ov.classList.add("open"); card.classList.remove("show"); box.style.opacity = 1; box.className = "crBox shake";
+  hint.textContent = ""; SFX.rattle();
+  const tCol = best.shiny ? "#ffffff" : T.col;
+  const finish = () => {
+    if (!crateBusy) return; crateBusy = false;
+    ov.classList.remove("open"); box.className = "crBox";
+    for (const p of pulls) obtainDie(p);                       // dice land on the plot / shelf
+    if (best.shiny) banner(`<span class="sp">★ SHINY</span> you pulled a <b>${kindName(best.tier, best.color)}</b>!`);
+    else if (best.tier >= 4) banner(`you pulled a <b>${kindName(best.tier, best.color)}</b>!`);
+    renderStorage(); if (C("ovBag").classList.contains("open")) renderBag();
+    if (crateResolve) { crateResolve(pulls); crateResolve = null; }
+  };
+  crateResolve = null;
+  setTimeout(() => {                                            // lid pops + rarity burst
+    box.className = "crBox pop"; burst.style.setProperty("--bc", tCol); burst.className = "crBurst go";
+    SFX.thunk(); best.tier >= 3 ? SFX.sparkle() : SFX.coin();
+  }, 820);
+  setTimeout(() => {                                            // the die card
+    C("crDie").style.background = COLORS[best.color]; C("crDie").style.setProperty("--tc", tCol);
+    C("crDie").textContent = "d" + T.sides; C("crDie").className = "crDie" + (best.shiny ? " shiny" : "");
+    C("crName").textContent = kindName(best.tier, best.color) + (best.shiny ? " ✦" : "");
+    C("crTier").textContent = T.name + (pulls.length > 1 ? `  +${pulls.length - 1} more` : ""); C("crTier").style.color = tCol;
+    card.className = "crCard show"; hint.textContent = "tap to continue";
+    if (best.tier >= 4 || best.shiny) SFX.sparkle();
+  }, 1320);
+  setTimeout(finish, 3200);
+  C("crateOv").onclick = () => { if (card.classList.contains("show")) finish(); };
+}
+function updateCrateButton() {
+  const btn = C("barCrate"); if (!btn) return;
+  const ok = crateAvailable();
+  btn.innerHTML = ok ? `Open crate<small>${fmt(crateCost())}</small>` : `Crate<small>locked</small>`;
+  btn.disabled = !ok || S.points < crateCost();
+  if (crateTag) { crateTag.el.innerHTML = ok ? `Crate<small>${fmt(crateCost())}</small>` : `Crate<small>soon</small>`; crateTag.el.classList.toggle("poor", ok && S.points < crateCost()); }
+}
+// World crate machine on the plot (replaces v1's special-dice pad). Walk into it to open a crate.
+const CRATE_POS = { x: -18.5, z: 17 };
+const crateMachine = new THREE.Group(); crateMachine.position.set(CRATE_POS.x, 0, CRATE_POS.z); scene.add(crateMachine);
+const cmBody = new THREE.Mesh(new THREE.BoxGeometry(4, 4.4, 4), std(0x7a4fb0, { metalness: .3, roughness: .5 })); cmBody.position.y = 2.4; cmBody.castShadow = true; crateMachine.add(cmBody);
+const cmGlass = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2, 3.2), new THREE.MeshStandardMaterial({ color: 0x9fd0ff, transparent: true, opacity: .4, roughness: .1, metalness: .4 })); cmGlass.position.y = 3.6; crateMachine.add(cmGlass);
+const cmDie = new THREE.Mesh(dieGeo, dieMaterials({ tier: 4, color: "yellow" })); cmDie.scale.setScalar(.8); cmDie.position.y = 3.6; crateMachine.add(cmDie);
+const cmTop = new THREE.Mesh(new THREE.CylinderGeometry(0, 1.6, 1, 4), std(0xffd23f, { emissive: 0xffb000, emissiveIntensity: .4 })); cmTop.position.y = 5.3; cmTop.rotation.y = Math.PI / 4; crateMachine.add(cmTop);
+let crateArmed = true;
+const crateTag = tag(new THREE.Vector3(CRATE_POS.x, 5.4, CRATE_POS.z), "Crate", "sign");
+
+// ================================================================ collection book
+function openCollection() { renderBook(); C("ovBook").classList.add("open"); SFX.pick(); }
+function renderBook() {
+  const g = C("bookGrid"); g.innerHTML = ""; let have = 0;
+  for (let t = TIERS.length - 1; t >= 0; t--) {
+    const row = document.createElement("div"); row.className = "bookRow";
+    const done = setComplete(t);
+    row.innerHTML = `<span style="color:${TIERS[t].col}">${TIERS[t].name}</span><i></i><span>${done ? `<span class="chk">✓ set +${Math.round(SET_BONUS[t] * 100)}%</span>` : `+${Math.round(SET_BONUS[t] * 100)}%`}</span>`;
+    g.appendChild(row);
+    for (const c of CNAMES) {
+      const id = kindId(t, c), owned = S.collection[id]; if (owned) have++;
+      const cell = document.createElement("div"); cell.className = "bookCell " + (owned ? "have" : "miss"); cell.style.setProperty("--tc", TIERS[t].col);
+      cell.innerHTML = `<div class="d" style="background:${owned ? COLORS[c] : ""}"></div><small>${owned ? CNAME[c] : "???"}</small>`;
+      g.appendChild(cell);
+    }
+  }
+  C("bookPct").textContent = `${have}/${TIERS.length * CNAMES.length}`;
+  C("bookFoot").innerHTML = `Collection bonus: points <b style="color:#ffd23f">×${fmtMult(collectionMult())}</b>`;
+}
+
+// ================================================================ pretend Robux shop
+let luckStack = 0;
+const SHOP = [
+  { id: "luck15", icon: "🍀", name: "Luck Boost", sub: "×2 luck · 15 min · stacks", price: 49, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Luck ×2", color: "#86e29a", dur: 15 * 60000, luck: 2 }); banner(`<b>Luck Boost</b> active · ×${fmtMult(luck())} luck`); } },
+  { id: "serverLuck", icon: "🌟", name: "Server Luck", sub: "×2 luck for everyone · 15 min", price: 99, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Server Luck", color: "#ffd23f", dur: 15 * 60000, luck: 2 }); banner(`<b>You</b> bought <span class="sp">Server Luck</span> — ×2 luck for the whole server!`); } },
+  { id: "x2", icon: "✖2", name: "x2 Points", sub: "Pass · permanent", price: 199, pass: true, act() { applyStats(); banner(`<b>x2 Points</b> pass unlocked`); } },
+  { id: "auto", icon: "⚙", name: "Auto-Open Crates", sub: "Pass · opens when you can afford it", price: 149, pass: true },
+  { id: "open3", icon: "3", name: "Open 3 at Once", sub: "Pass · triple every pull", price: 179, pass: true },
+  { id: "bigbag", icon: "🎒", name: "Bigger Storage", sub: "Pass · 12 → 24 shelf slots", price: 99, pass: true },
+  { id: "vip", icon: "👑", name: "VIP Plot", sub: "Pass · golden plot look", price: 129, pass: true, act() { matMesh.material.color.setHex(0xffe27a); pads.forEach(p => p.mesh.material.emissive.setHex(0xffd23f)); } },
+  { id: "starter", icon: "🎁", name: "Starter Pack", sub: "One-time · 3,000 points + a Rare die", price: 29, once: true, act() { earn(3000); obtainDie({ tier: 2, color: CNAMES[rnd(5)], level: 0, shiny: false }); banner(`<b>Starter Pack</b> claimed`); renderStorage(); } },
+];
+function openShop() { renderShop(); C("ovShop").classList.add("open"); SFX.pick(); }
+function renderShop() {
+  const list = C("shopList"); list.innerHTML = "";
+  for (const it of SHOP) {
+    const owned = (it.pass || it.once) && S.passes[it.id];
+    const row = document.createElement("div"); row.className = "shopRow";
+    row.innerHTML = `<div class="si">${it.icon}</div><div class="st"><b>${it.name}</b><small>${it.sub}</small></div>`;
+    const btn = document.createElement("button"); btn.textContent = owned ? "Owned" : "R$ " + it.price; btn.className = owned ? "owned" : "";
+    if (!owned) btn.onclick = () => buyShopItem(it.id); else btn.disabled = true;
+    row.appendChild(btn); list.appendChild(row);
+  }
+}
+function buyShopItem(id) {
+  const it = SHOP.find(x => x.id === id); if (!it) return false;
+  if ((it.pass || it.once) && S.passes[id]) return false;
+  if (it.pass || it.once) S.passes[id] = true;    // no real payment, no confirm — it just works
+  if (it.act) it.act();
+  SFX.coin(); applyStats(); renderShop(); renderChips(); renderStorage(); updateMenuCounts();
   return true;
 }
-function startReplace(kind) {
-  replaceKind = kind; document.body.classList.add("replacing");
-  announce(`Tap a die to replace with <b>${SPECIAL[kind].name}</b>`);
-  mine.cells.forEach((d, i) => { if (d) tween(260, e => d.mesh.scale.setScalar(1 + .14 * Math.sin(Math.PI * e)), (i % N) * 20); });
-  SFX.pick();
-}
-function finishReplace(cell) { const k = replaceKind; replaceKind = null; document.body.classList.remove("replacing"); buySpecial(k, cell); }
-function cancelReplace() { replaceKind = null; document.body.classList.remove("replacing"); }
 
-// --- picker ---
-function openPicker() {
-  cancelReplace();
-  const list = document.getElementById("pkList"); list.innerHTML = "";
-  const pres = (S.prestige || 0), cost = specialCost();
-  for (const k of SKINDS) {
-    const sp = SPECIAL[k], unlocked = pres >= sp.lv, afford = S.points >= cost;
-    const row = document.createElement("button"); row.className = "pkRow" + (unlocked ? "" : " locked");
-    row.innerHTML = `<i class="pkEmb${sp.rainbow ? " rainbow" : ""}" style="--c:#${hex6(sp.col)}">${sp.sym}</i><span class="pkName">${sp.name}</span>`
-      + (unlocked ? `<span class="pkCost${afford ? "" : " poor"}">${fmt(cost)}</span>` : `<span class="pkLock">P${sp.lv}</span>`);
-    if (unlocked) row.addEventListener("click", () => buySpecial(k)); else row.disabled = true;
-    list.appendChild(row);
+// ================================================================ storage shelf UI (place / merge)
+let bagSel = null;
+function openBag() { renderBag(); C("ovBag").classList.add("open"); SFX.pick(); }
+function renderStorage() { if (C("ovBag").classList.contains("open")) renderBag(); updateMenuCounts(); }
+function renderBag() {
+  bagSel = bagSel != null && bagSel < S.storage.length ? bagSel : null;
+  const g = C("bagGrid"); g.innerHTML = ""; const cap = storageCap();
+  C("bagCap").textContent = `${S.storage.length}/${cap}`;
+  const slots = Math.max(cap, S.storage.length);
+  for (let i = 0; i < slots; i++) {
+    const d = S.storage[i], cell = document.createElement("div");
+    if (!d) { cell.className = "bagCell empty"; cell.innerHTML = `<div class="d" style="background:transparent;box-shadow:none"></div>`; g.appendChild(cell); continue; }
+    cell.className = "bagCell" + (bagSel === i ? " sel" : ""); cell.style.setProperty("--tc", TIERS[d.tier].col);
+    cell.innerHTML = `<div class="d" style="background:${COLORS[d.color]}">d${TIERS[d.tier].sides}</div>`
+      + (d.level ? `<span class="lv">+${d.level}</span>` : "") + (d.shiny ? `<span class="sh">✦</span>` : "");
+    cell.onclick = () => bagClick(i); g.appendChild(cell);
   }
-  document.getElementById("picker").classList.add("open"); SFX.pick();
 }
-function closePicker() { document.getElementById("picker").classList.remove("open"); }
-document.getElementById("pkClose").addEventListener("click", closePicker);
-document.getElementById("picker").addEventListener("click", e => { if (e.target.id === "picker") closePicker(); });
+function bagClick(i) {
+  const d = S.storage[i]; if (!d) return;
+  if (bagSel === i) { placeFromStorage(i); bagSel = null; renderBag(); return; }
+  if (bagSel != null) {
+    const s = S.storage[bagSel];
+    if (s && s.tier === d.tier && s.color === d.color && (s.level | 0) === (d.level | 0)) { // merge a matching pair → one level up
+      const keep = Math.min(bagSel, i), drop = Math.max(bagSel, i);
+      S.storage[keep] = { ...d, level: (d.level | 0) + 1 }; S.storage.splice(drop, 1);
+      bagSel = null; SFX.sparkle(); announce(`Merged → <b>${kindName(d.tier, d.color)} +${(d.level | 0) + 1}</b>`); renderBag(); updateMenuCounts(); return;
+    }
+  }
+  bagSel = i; SFX.pick(); renderBag();
+}
+function placeFromStorage(i) {
+  const cell = mine.emptyCell();
+  if (cell === undefined) { SFX.no(); announce("Board full — unlock a cell"); return; }
+  const d = S.storage.splice(i, 1)[0]; mine.addDie(cell, d, true); SFX.buy(); updateMenuCounts();
+}
+function updateMenuCounts() {
+  const have = Object.keys(S.collection).length;
+  C("bookN").textContent = `${have}/${TIERS.length * CNAMES.length}`;
+  C("bagN").textContent = `${S.storage.length}`;
+}
+
+// ================================================================ server banner + fake live pulls
+let nextFake = 45000; // first fake pull ~45s in (game time)
+function banner(html) { const el = C("banner"); el.classList.remove("show"); void el.offsetWidth; el.innerHTML = html; el.classList.add("show"); }
+const FAKE_NAMES = ["Zylo", "mango_77", "BigRoller", "kiki", "DevonX", "pixelcat", "Sven", "QueenB", "noobmaster", "Taz"];
+function fakePull() {
+  const name = FAKE_NAMES[rnd(FAKE_NAMES.length)];
+  if (Math.random() < .45) { const t = 5, c = CNAMES[rnd(5)]; banner(`<span class="sp">★ SHINY</span> <b>${name}</b> pulled a <b>${kindName(t, c)}</b>!`); }
+  else { const t = 4, c = CNAMES[rnd(5)]; banner(`<b>${name}</b> pulled a <b>${kindName(t, c)}</b>`); }
+}
+
+// ================================================================ menu wiring + init
+C("menu").addEventListener("click", e => { const k = e.target.closest("[data-menu]"); if (!k) return;
+  ({ shop: openShop, book: openCollection, bag: openBag })[k.dataset.menu](); });
+document.querySelectorAll(".overlay").forEach(ov => ov.addEventListener("click", e => { if (e.target === ov || e.target.hasAttribute("data-close")) ov.classList.remove("open"); }));
+C("barCrate").addEventListener("click", () => openCrate(false));
+
+// Starting deck: three plain Common dice on the three starting cells — the whole board to begin with.
+for (let k = 0; k < 3; k++) obtainDie({ tier: 0, color: CNAMES[k], level: 0, shiny: false });
+applyStats(); updateMenuCounts();
 
 window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy,
-  // powers + shiny
+  // dice / rarity
+  TIERS, kindId, kindName, obtainDie,
+  // crates
+  openCrate, crateCost, crateAvailable, pickTier, setCrateForce: f => { crateForce = f; },
+  // storage / collection / shop
+  renderStorage, openCollection, openShop, buyShopItem, SHOP, collectionMult, luck,
+  // powers + world shiny
   POWERS, SHINY_FX, buffs, pstate, usePower, addBuff, stats,
   spawnShiny, claimShiny, shiny, mikey, pickShiny,
-  // special dice
-  buySpecial, openPicker, closePicker, SPECIAL, specialCost,
   // prestige
-  doPrestige, prestigeStatus, get N() { return N; }, addRun: v => { S.points += v; S.runPoints += v; } }; // test hook
+  doPrestige, prestigeStatus, get N() { return N; }, addRun: v => earn(v) }; // test hook
 </script>
 </body></html>

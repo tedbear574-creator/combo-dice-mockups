@@ -1,195 +1,158 @@
-// Headless pacing simulation for the Combo Dice tycoon mockup.
+// Headless pacing simulation for the Combo Dice v2 economy (the "dice worth having" rework).
 //
-//   node scripts/prestige-sim.js            # pacing table at normal speed, greedy buyer
-//   node scripts/prestige-sim.js --cycles 3 # simulate N prestige cycles
+//   node scripts/prestige-sim.js
 //
-// It ports the real board scoring rule (color groups, number chains, loose dice) and the
-// economy constants from tycoon-v1.html, drives a greedy buyer, and reports the
-// game-time it takes to hit each pacing milestone. Keep ECON / the stats() / threshold math
-// in sync with the "economy" and "prestige" sections of tycoon-v1.html.
+// It mirrors the v2 constants and scoring from tycoon-v2.html — rarity tiers, per-die multipliers, the scarce
+// board (cells unlock one at a time), and crate pulls — and drives two players:
+//   • free   — never spends Robux (luck ×1)
+//   • buyer  — buys a 15-min Luck Boost (×2) whenever one isn't running
+// and reports the game-time each hits the pacing milestones:
+//   first crate ~3-5 min · first rare-tier die < 15 min · board full < 1 h · top tier a multi-day chase (free).
+// Keep TIERS / COST / CRATE_* / scoring in sync with the matching sections of tycoon-v2.html.
 
-// ---- economy constants (mirror of tycoon-v1.html) -------------------------------------
-const E = (k, d) => (process.env[k] !== undefined ? +process.env[k] : d);
-const ECON = {
-  dieBase: E("DIE_BASE", 155), dieRate: E("DIE_RATE", 1.32),     // Buy die
-  comboBase: E("COMBO_BASE", 560), comboRate: E("COMBO_RATE", 1.43), // Better combos
-  speedBase: E("SPEED_BASE", 480), speedRate: E("SPEED_RATE", 1.5), // Faster rolls
-  comboStep: 0.25,
-  speedDecay: 0.9,
-  rollMsBase: 2000,
-  startDice: 4,
-  prestige: { base: E("P_BASE", 900000), rate: E("P_RATE", 2.8), pointsPer: 0.25, comboCapPer: 1, rollFloorPer: 60, startDiePer: 1 },
-};
+// ---- constants (mirror of tycoon-v2.html) ---------------------------------------------------
+const TIERS = [
+  { id: "common",   mult: 1,   sides: 6,  w: 1000 },
+  { id: "uncommon", mult: 1.6, sides: 6,  w: 300 },
+  { id: "rare",     mult: 2.6, sides: 8,  w: 95 },
+  { id: "epic",     mult: 4.2, sides: 10, w: 26 },
+  { id: "legend",   mult: 7,   sides: 12, w: 6 },
+  { id: "mythic",   mult: 12,  sides: 20, w: 1 },
+];
 const COLORS = 5;
-
-const rollFloor = p => Math.max(220, 500 - ECON.prestige.rollFloorPer * p);
-const comboCap = p => 5 + ECON.prestige.comboCapPer * p;
-const boardSizeFor = p => (p >= 2 ? 7 : p >= 1 ? 6 : 5);
-
-function stats(S) {
-  return {
-    rollMs: Math.max(rollFloor(S.prestige), Math.round(ECON.rollMsBase * Math.pow(ECON.speedDecay, S.speedLv))),
-    combo: Math.min(comboCap(S.prestige), 1 + ECON.comboStep * S.comboLv),
-    pointsMult: Math.pow(1 + ECON.prestige.pointsPer, S.prestige),
-  };
-}
-const cost = {
-  die: S => Math.round(ECON.dieBase * Math.pow(ECON.dieRate, S.bought)),
-  combo: S => Math.round(ECON.comboBase * Math.pow(ECON.comboRate, S.comboLv)),
-  speed: S => Math.round(ECON.speedBase * Math.pow(ECON.speedRate, S.speedLv)),
+const dieMult = (tier, level) => TIERS[tier].mult * (1 + .5 * (level || 0));
+function faceSet(sides) { if (sides === 6) return [3, 4, 1, 6, 2, 5]; const o = []; for (let i = 0; i < 6; i++) o.push(Math.round(1 + i * (sides - 1) / 5)); return o; }
+const rollFloor = p => Math.max(220, 500 - 60 * p);
+const comboCap = p => 5 + p;
+const boardSizeFor = p => Math.min(7, 5 + (p >= 2 ? 2 : p >= 1 ? 1 : 0));
+const COST = {
+  cell: s => Math.round(140 * Math.pow(1.4, s.cells - 3)),
+  combo: s => Math.round(260 * Math.pow(1.42, s.comboLv)),
+  speed: s => Math.round(300 * Math.pow(1.5, s.speedLv)),
 };
-const canBuy = (S, k, N) =>
-  (k !== "die" || diceCount(S) < N * N) &&
-  (k !== "speed" || stats(S).rollMs > rollFloor(S.prestige)) &&
-  (k !== "combo" || stats(S).combo < comboCap(S.prestige));
-const diceCount = S => ECON.startDice + ECON.prestige.startDiePer * S.prestige + S.bought;
+const CRATE_UNLOCK = 1600, SHINY_BASE = 1 / 750;
+// Crate cost climbs within a prestige run (so filling a board is an arc, not instant) but resets each prestige —
+// prestige keeps your collection, so a fresh run refills from the shelf and the chase accelerates over days.
+const crateCost = s => Math.round(420 * Math.pow(1.14, s.crateRun));
+const levelThreshold = lv => 60000 * Math.pow(2.9, lv);
+const rollMsOf = s => Math.max(rollFloor(s.prestige), Math.round(2000 * Math.pow(.9, s.speedLv)));
+const comboOf = s => Math.min(comboCap(s.prestige), 1 + .25 * s.comboLv);
 
-// threshold on run points to gain level `lv+1` from level `lv` (incremental, so levels bank)
-const levelThreshold = lv => ECON.prestige.base * Math.pow(ECON.prestige.rate, lv);
-// total run points to reach `target` levels from `from`
-function runPointsFor(from, target) {
-  let t = 0;
-  for (let lv = from; lv < target; lv++) t += levelThreshold(lv);
-  return t;
-}
-function levelsReachable(runPoints, from) {
-  let lv = from, t = 0;
-  while (true) { const need = levelThreshold(lv); if (runPoints < t + need) break; t += need; lv++; }
-  return lv - from;
-}
-
-// ---- scoring port ---------------------------------------------------------------------------
 const rnd = n => Math.floor(Math.random() * n);
-function cellOrder(N) {
-  const c0 = (N - 1) / 2;
-  return [...Array(N * N).keys()].sort((a, b) => dist(a) - dist(b));
-  function dist(i) { const r = Math.floor(i / N) - c0, c = i % N - c0; return r * r + c * c + (r + c) * 0.01; }
-}
-function neighbors(i, N) {
-  const r = Math.floor(i / N), c = i % N, out = [];
-  for (const [dr, dc] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
-    const r2 = r + dr, c2 = c + dc;
-    if (r2 >= 0 && r2 < N && c2 >= 0 && c2 < N) out.push(r2 * N + c2);
-  }
-  return out;
-}
-function scoreOnce(cells, combo, pointsMult, N) {
+function pickTier(l) { const wsum = TIERS.reduce((t, x, i) => t + x.w * (i ? l : 1), 0); let r = Math.random() * wsum; for (let i = 0; i < TIERS.length; i++) { const w = TIERS[i].w * (i ? l : 1); if ((r -= w) < 0) return i; } return 0; }
+
+// ---- scoring port (color groups, number chains, loose; per-die face multiplier) -------------
+function cellOrder(N) { const c0 = (N - 1) / 2; return [...Array(N * N).keys()].sort((a, b) => d(a) - d(b)); function d(i) { const r = Math.floor(i / N) - c0, c = i % N - c0; return r * r + c * c + (r + c) * .01; } }
+function neighbors(i, N) { const r = Math.floor(i / N), c = i % N, out = []; for (const [dr, dc] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) { const r2 = r + dr, c2 = c + dc; if (r2 >= 0 && r2 < N && c2 >= 0 && c2 < N) out.push(r2 * N + c2); } return out; }
+function scoreOnce(cells, combo, N) {
   const live = i => cells[i];
   const mult = n => 1 + (n - 1) * combo;
-  const flood = same => {
-    const seen = new Set(), out = [];
-    for (let i = 0; i < N * N; i++) {
-      if (!live(i) || seen.has(i)) continue;
-      const g = [i]; seen.add(i);
-      for (let k = 0; k < g.length; k++) for (const j of neighbors(g[k], N))
-        if (!seen.has(j) && live(j) && same(live(g[k]), live(j))) { seen.add(j); g.push(j); }
-      out.push(g);
-    }
-    return out;
-  };
-  const sumOf = g => g.reduce((t, i) => t + live(i).face, 0);
+  const flood = same => { const seen = new Set(), out = []; for (let i = 0; i < N * N; i++) { if (!live(i) || seen.has(i)) continue; const g = [i]; seen.add(i); for (let k = 0; k < g.length; k++) for (const j of neighbors(g[k], N)) if (!seen.has(j) && live(j) && same(live(g[k]), live(j))) { seen.add(j); g.push(j); } out.push(g); } return out; };
+  const wsum = g => g.reduce((t, i) => t + cells[i].face * cells[i].mult, 0);
   const colorGroups = flood((x, y) => x.color === y.color);
   let total = 0;
   const loose = colorGroups.filter(g => g.length === 1).flat();
-  if (loose.length) total += Math.round(sumOf(loose) * pointsMult);
-  for (const g of colorGroups.filter(g => g.length > 1)) total += Math.round(sumOf(g) * mult(g.length) * pointsMult);
-  for (const g of flood((x, y) => x.face === y.face).filter(g => g.length > 1)) total += Math.round(sumOf(g) * mult(g.length) * pointsMult);
+  if (loose.length) total += Math.round(wsum(loose));
+  for (const g of colorGroups.filter(g => g.length > 1)) total += Math.round(wsum(g) * mult(g.length));
+  for (const g of flood((x, y) => x.face === y.face).filter(g => g.length > 1)) total += Math.round(wsum(g) * mult(g.length));
   return total;
 }
-// average points per roll for a given dice count / combo / mult / board size
+// Monte-Carlo average points per roll for the current placed dice. Cached by a board signature.
 const avgCache = new Map();
-function avgScore(S, N) {
-  const d = diceCount(S), s = stats(S);
-  const key = `${d}|${s.combo.toFixed(3)}|${s.pointsMult.toFixed(3)}|${N}`;
+function avgScore(s) {
+  const N = boardSizeFor(s.prestige), order = cellOrder(N), placed = s.board; // s.board: list of {tier,color,level}
+  const key = N + "|" + comboOf(s).toFixed(3) + "|" + placed.map(d => d.tier + d.color + (d.level | 0)).sort().join(",");
   if (avgCache.has(key)) return avgCache.get(key);
-  const order = cellOrder(N), occupied = order.slice(0, d);
-  const trials = 400; let sum = 0;
+  const combo = comboOf(s), trials = 300; let sum = 0;
   for (let t = 0; t < trials; t++) {
     const cells = Array(N * N).fill(null);
-    for (const i of occupied) cells[i] = { color: rnd(COLORS), face: 1 + rnd(6) };
-    sum += scoreOnce(cells, s.combo, s.pointsMult, N);
+    placed.forEach((d, k) => { const vals = faceSet(TIERS[d.tier].sides); cells[order[k]] = { color: d.color, face: vals[rnd(6)], mult: dieMult(d.tier, d.level) }; });
+    sum += scoreOnce(cells, combo, N);
   }
   const v = sum / trials; avgCache.set(key, v); return v;
 }
 
-// ---- greedy buyer ---------------------------------------------------------------------------
-function fresh() { return { points: 0, run: 0, bought: 0, speedLv: 0, comboLv: 0, prestige: 0 }; }
-function greedyBuy(S, N) {
+// ---- a player -------------------------------------------------------------------------------
+function fresh() { return { points: 0, lifetime: 0, runPoints: 0, cells: 3, comboLv: 0, speedLv: 0, prestige: 0, cratesOpened: 0, crateRun: 0,
+  board: [{ tier: 0, color: 0 }, { tier: 0, color: 1 }, { tier: 0, color: 2 }], storage: [], collection: new Set(["0:0", "0:1", "0:2"]) }; }
+// Prestige: keep every die + the collection, reset the run (points, upgrades, cells, crate-run cost), grow the board.
+function doPrestige(s) {
+  s.prestige++; s.points = 0; s.runPoints = 0; s.comboLv = 0; s.speedLv = 0; s.cells = 3; s.crateRun = 0;
+  const all = [...s.board, ...s.storage]; all.sort((a, b) => dieMult(b.tier, b.level) - dieMult(a.tier, a.level));
+  s.board = all.slice(0, s.cells); s.storage = all.slice(s.cells);
+}
+const maxCells = s => boardSizeFor(s.prestige) ** 2;
+// A smart player places their best dice: if the board is full, a stronger die bumps the weakest onto the shelf.
+function obtain(s, spec) {
+  s.collection.add(spec.tier + ":" + spec.color);
+  if (s.board.length < s.cells) { s.board.push(spec); return; }
+  let wi = 0; for (let i = 1; i < s.board.length; i++) if (dieMult(s.board[i].tier, s.board[i].level) < dieMult(s.board[wi].tier, s.board[wi].level)) wi = i;
+  if (dieMult(spec.tier, spec.level) > dieMult(s.board[wi].tier, s.board[wi].level)) { s.storage.push(s.board[wi]); s.board[wi] = spec; }
+  else s.storage.push(spec);
+}
+function openCrate(s, luck) {
+  s.points -= crateCost(s);
+  let tier = pickTier(luck); if (s.cratesOpened === 0) tier = Math.max(tier, 2);
+  const shiny = Math.random() < SHINY_BASE * luck;
+  s.cratesOpened++; s.crateRun++; obtain(s, { tier, color: rnd(COLORS), level: 0, shiny });
+}
+// One spending pass. Policy: the crate is the chase — buy it whenever it's available and affordable. Unlock a cell
+// only when a die is waiting for it (storage non-empty) — filling an empty board is never the cheap first move.
+// Spare points go to combos then speed, alternating, so scoring keeps pace with the growing collection.
+function spend(s, luck) {
   for (;;) {
-    const opts = ["die", "combo", "speed"].filter(k => canBuy(S, k, N)).map(k => [k, cost[k](S)])
-      .filter(([, c]) => c <= S.points).sort((a, b) => a[1] - b[1]);
-    if (!opts.length) return;
-    const [k, c] = opts[0];
-    S.points -= c;
-    if (k === "die") S.bought++; else if (k === "combo") S.comboLv++; else S.speedLv++;
-  }
-}
-
-const fmtT = s => `${Math.floor(s / 60)}m${String(Math.floor(s % 60)).padStart(2, "0")}s`;
-const fmt = n => n < 1e4 ? Math.round(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : (n / 1e6).toFixed(2) + "M";
-
-function run(cycles) {
-  const S = fresh();
-  let gt = 0; // game-seconds
-  let N = boardSizeFor(S.prestige);
-  const marks = {};
-  const mark = (k, extra) => { if (marks[k] === undefined) { marks[k] = gt; if (extra) marks[k + "_x"] = extra; } };
-  const rows = [];
-  let cycle = 0, cycleStart = 0, prevPeakRun = 0;
-
-  for (let step = 0; step < 6_000_000 && cycle < cycles; step++) {
-    const s = stats(S);
-    gt += s.rollMs / 1000;
-    const gained = avgScore(S, N);
-    S.points += gained; S.run += gained;
-    greedyBuy(S, N);
-
-    const d = diceCount(S);
-    if (d >= ECON.startDice + 1) mark("firstDie");
-    if (d >= 9) mark("dice9");
-    if (d >= 25) mark("full5x5");
-    if (!canBuy(S, "combo", N)) mark("comboCap");
-    if (!canBuy(S, "speed", N)) mark("speedCap");
-    const avail = levelsReachable(S.run, S.prestige);
-    if (avail >= 1) mark("firstPrestige");
-
-    // Greedy player prestiges as soon as a level is reachable — claiming it promptly keeps each
-    // prestige a +1 step (so the 5→6→7 board growth is felt one milestone at a time).
-    if (avail >= 1) {
-      rows.push({
-        cycle: cycle + 1, dur: gt - cycleStart, atGt: gt, gained: avail, from: S.prestige,
-        to: S.prestige + avail, peakRun: S.run, peakDice: d, N,
-        timeToPrevPeak: marks["prevPeak_t"] ?? null,
-      });
-      // apply prestige
-      S.prestige += avail; S.run = 0; S.points = 0; S.bought = 0; S.speedLv = 0; S.comboLv = 0;
-      N = boardSizeFor(S.prestige);
-      cycle++; cycleStart = gt; prevPeakRun = rows[rows.length - 1].peakRun;
-      // reset per-cycle marks that should re-measure "time to reach previous peak"
-      delete marks.prevPeak_t;
-      marks._prevPeakTarget = prevPeakRun;
+    let acted = false;
+    if (s.lifetime >= CRATE_UNLOCK && s.points >= crateCost(s)) { openCrate(s, luck); acted = true; continue; }
+    if (s.storage.length && s.cells < maxCells(s) && s.points >= COST.cell(s)) { s.points -= COST.cell(s); s.cells++; s.board.push(s.storage.shift()); acted = true; continue; }
+    const canCombo = comboOf(s) < comboCap(s.prestige), canSpeed = rollMsOf(s) > rollFloor(s.prestige);
+    const cCombo = COST.combo(s), cSpeed = COST.speed(s);
+    // only spend on upgrades if we're not saving toward a crate we can almost afford
+    const savingForCrate = s.lifetime >= CRATE_UNLOCK && s.points < crateCost(s) && s.points > crateCost(s) * .5;
+    if (!savingForCrate) {
+      if (canCombo && s.points >= cCombo && (s.comboLv <= s.speedLv || !canSpeed)) { s.points -= cCombo; s.comboLv++; acted = true; continue; }
+      if (canSpeed && s.points >= cSpeed) { s.points -= cSpeed; s.speedLv++; acted = true; continue; }
     }
-    // time for the NEW run to reach the previous run's peak run-points
-    if (marks._prevPeakTarget && S.run >= marks._prevPeakTarget && marks.prevPeak_t === undefined)
-      marks.prevPeak_t = gt - cycleStart;
-
-    if (gt > 60 * 60 * 4) break; // 4h game-time safety
+    if (!acted) return;
   }
-
-  console.log("\nPacing milestones (normal speed, greedy buyer):");
-  const label = {
-    firstDie: "first die bought", dice9: "9 dice", full5x5: "full 5x5 (25 dice)",
-    comboCap: "combo cap reached", speedCap: "speed cap reached", firstPrestige: "first prestige reachable",
-  };
-  for (const k of ["firstDie", "dice9", "full5x5", "comboCap", "speedCap", "firstPrestige"])
-    console.log(`  ${label[k].padEnd(26)} ${marks[k] !== undefined ? fmtT(marks[k]) : "—"}`);
-
-  console.log("\nPrestige cycles:");
-  console.log("  #  board  dur       gained  lvl→lvl   peak run pts  dice  time-to-prev-peak");
-  for (const r of rows)
-    console.log(`  ${String(r.cycle).padEnd(2)} ${r.N}x${r.N}   ${fmtT(r.dur).padEnd(9)} +${String(r.gained).padEnd(5)} ${r.from}→${String(r.to).padEnd(6)} ${fmt(r.peakRun).padEnd(13)} ${String(r.peakDice).padEnd(5)} ${r.timeToPrevPeak != null ? fmtT(r.timeToPrevPeak) : "—"}`);
-  console.log("");
 }
 
-const argCycles = (() => { const i = process.argv.indexOf("--cycles"); return i > 0 ? +process.argv[i + 1] : 4; })();
-run(argCycles);
+function run(label, buyer) {
+  const s = fresh(); let gt = 0, luckUntil = 0;
+  const marks = {};
+  const mark = (k, extra) => { if (marks[k] === undefined) { marks[k] = gt; if (extra !== undefined) marks[k + "_x"] = extra; } };
+  const topTier = () => Math.max(...[...s.collection].map(k => +k.split(":")[0]));
+  const DAY = 24 * 3600;
+  for (let step = 0; step < 50_000_000; step++) {
+    const luck = buyer && gt < luckUntil ? 2 : 1;
+    if (buyer && gt >= luckUntil) luckUntil = gt + 15 * 60; // re-up the 15-min boost the moment it lapses
+    const ms = rollMsOf(s); gt += ms / 1000;
+    const gained = avgScore(s); s.points += gained; s.lifetime += gained; s.runPoints += gained;
+    spend(s, luck);
+    if (s.cratesOpened >= 1) mark("firstCrate");
+    if ([...s.collection].some(k => +k.split(":")[0] >= 2)) mark("firstRare");
+    if ([...s.collection].some(k => +k.split(":")[0] >= 3)) mark("firstEpic");
+    if ([...s.collection].some(k => +k.split(":")[0] >= 4)) mark("firstLegend");
+    if ([...s.collection].some(k => +k.split(":")[0] >= 5)) mark("firstMythic");
+    if (s.board.length >= maxCells(s) && s.cells >= maxCells(s)) mark("boardFull", s.cratesOpened);
+    if (s.collection.size >= 30) mark("allKinds");
+    // Prestige when a level is reachable AND the board is full this run (so the run's work is banked first).
+    if (s.runPoints >= levelThreshold(s.prestige) && s.cells >= maxCells(s)) doPrestige(s);
+    if (gt > 14 * DAY) break; // 14 game-days safety
+    if (marks.firstMythic !== undefined && marks.boardFull !== undefined && marks.allKinds !== undefined) break;
+  }
+  const fmtT = sec => sec == null ? "—" : sec < 3600 ? `${Math.floor(sec / 60)}m${String(Math.floor(sec % 60)).padStart(2, "0")}s`
+    : sec < 86400 ? `${(sec / 3600).toFixed(1)}h` : `${(sec / 86400).toFixed(1)}d`;
+  console.log(`\n== ${label} ==`);
+  console.log(`  first crate          ${fmtT(marks.firstCrate)}`);
+  console.log(`  first Rare die       ${fmtT(marks.firstRare)}`);
+  console.log(`  first Epic die       ${fmtT(marks.firstEpic)}`);
+  console.log(`  first Legendary      ${fmtT(marks.firstLegend)}`);
+  console.log(`  first Mythic         ${fmtT(marks.firstMythic)}`);
+  console.log(`  board full (25)      ${fmtT(marks.boardFull)}${marks.boardFull_x ? `  (${marks.boardFull_x} crates)` : ""}`);
+  console.log(`  all 30 kinds         ${fmtT(marks.allKinds)}`);
+  console.log(`  crates opened        ${s.cratesOpened}   top tier ${["Common","Uncommon","Rare","Epic","Legendary","Mythic"][topTier()]}`);
+}
+
+run("free player (luck ×1)", false);
+run("buyer (Luck Boost ×2)", true);
+console.log("");
