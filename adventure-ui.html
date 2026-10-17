@@ -1,0 +1,1205 @@
+<!doctype html>
+<!--
+PROTOTYPE, throwaway. A playable slice of an Adventure run: the hand screen
+(roll, keep or mark dice, drag to reorder, reroll, play, scoring playback with
+a score sheet), the cash-out tally, the shop (3 packs, shop reroll, your dice
+rack with rolled + reserve slots), and pack opening (pick 1 of 3; tools and
+stamps then ask for a die and face). Landscape phone canvas, 844x390.
+Round 1 layouts (A Table, B Score sheet, C Equation) are in this branch's
+history (commit ba8920b); Tod picked A as the base with B's sheet folded in.
+Rules mirror src/shared (Scoring, Dice, Content, Adventure), renamed for players:
+points (was chips) = number hand + every face's number + point bonuses;
+bonus (was mult) = color hand + bonus adds, then every x bonus.
+Boss rules, Diamond and hand-picking 5 of your dice are not in yet.
+Sounds are synthesized with Web Audio; no asset files.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Combo Dice - Adventure (prototype)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #07060d; overflow: hidden;
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; color: #f6f3ff;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #wrap { position: fixed; left: 0; right: 0; top: 0; bottom: 46px; display: flex;
+    align-items: center; justify-content: center; }
+  #stage { width: 844px; height: 390px; position: relative; flex: none; overflow: hidden;
+    border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.6); transform-origin: center;
+    --pts: #4f9bff; --bon: #ff4d63; --pts-ink: #1d5fd0; --bon-ink: #d1233a; }
+  #fx { position: absolute; inset: 0; pointer-events: none; z-index: 80; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  button:disabled { opacity: .35; cursor: default; }
+  .screen { position: absolute; inset: 0; display: none; gap: 12px; padding: 12px;
+    background: radial-gradient(ellipse at 55% 45%, #2a7a5a 0%, #165038 55%, #0b2a1e 100%); }
+  .screen.on { display: flex; }
+  #shop { background: repeating-linear-gradient(90deg, rgba(0,0,0,.14) 0 2px, transparent 2px 84px), linear-gradient(180deg, #4a2f1a 0%, #2c1b0e 70%, #1e1209 100%); }
+
+  /* ---------- side column ---------- */
+  .side { width: 150px; flex: none; background: rgba(0,0,0,.28); border-radius: 16px; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px; }
+  .roundCard { background: #e0a000; color: #2b1800; border-radius: 12px; padding: 7px 8px; text-align: center; }
+  .roundCard.boss { background: #e5484d; color: #fff; }
+  .roundCard.shopCard { background: #d99a52; color: #2b1606; }
+  .roundCard .rname { font-size: 18px; font-weight: 900; } .roundCard .ante { font-size: 12px; font-weight: 800; opacity: .75; }
+  .lbl { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+  .goal .big { font-size: 26px; font-weight: 900; }
+  .goal.round .big { color: #ffd23f; }
+  .stats { display: flex; justify-content: space-between; }
+  .reserve { display: flex; gap: 5px; min-height: 30px; margin-top: 2px; }
+  .sideFoot { margin-top: auto; display: flex; gap: 6px; }
+  .money { flex: 1; font-size: 28px; font-weight: 900; color: #ffd23f; text-align: center;
+    background: rgba(0,0,0,.25); border-radius: 12px; padding: 4px; }
+  .gear { width: 44px; border-radius: 12px; background: rgba(0,0,0,.25); font-size: 22px; }
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+
+  /* ---------- relics ---------- */
+  .relics { display: flex; gap: 8px; height: 56px; flex: none; }
+  .relic { position: relative; cursor: pointer; width: 54px; height: 54px; border-radius: 12px; background: rgba(255,255,255,.12);
+    display: grid; place-items: center; border: 2px solid rgba(255,255,255,.18); flex: none; }
+  .relic.empty { border-style: dashed; background: transparent; cursor: default; }
+  .relic .icon { font-size: 25px; line-height: 1; }
+  .relic .name { position: absolute; bottom: -3px; font-size: 9px; font-weight: 800; white-space: nowrap; opacity: .8; }
+  .relic.trigger { animation: wiggle .35s ease; }
+  .relic.arrive { animation: arrive .5s cubic-bezier(.2,1.6,.4,1); }
+  .relic .tip { display: none; position: absolute; z-index: 40; top: 100%; left: 50%; transform: translateX(-50%);
+    margin-top: 6px; width: 150px; padding: 8px 10px; border-radius: 10px; background: #fff; color: #221a3a;
+    font-size: 13px; font-weight: 700; text-align: center; box-shadow: 0 6px 16px rgba(0,0,0,.5); }
+  .relic.show .tip { display: block; }
+  @keyframes wiggle { 0%,100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-12deg) scale(1.2); }
+    60% { transform: rotate(10deg) scale(1.2); } }
+  @keyframes arrive { 0% { transform: scale(0) rotate(-30deg); } 100% { transform: scale(1) rotate(0); } }
+
+  /* ---------- dice and face tiles (one look at every size; --s sets the size) ---------- */
+  .ft { --s: 40px; position: relative; width: var(--s); height: var(--s); border-radius: calc(var(--s) * .22); display: grid; flex: none;
+    place-items: center; font-size: calc(var(--s) * .52); font-weight: 900; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.3);
+    box-shadow: inset 0 calc(var(--s) * -.09) 0 rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.25), 0 4px 10px rgba(0,0,0,.4); }
+  .ft.c-red    { background: linear-gradient(160deg, #ff6a6f, #d1343b); }
+  .ft.c-blue   { background: linear-gradient(160deg, #5f97ff, #2a5fe0); }
+  .ft.c-green  { background: linear-gradient(160deg, #47d18a, #1f9555); }
+  .ft.c-yellow { background: linear-gradient(160deg, #ffd34d, #e0a000); color: #3b2a00; text-shadow: 0 2px 0 rgba(255,255,255,.35); }
+  .ft.c-purple { background: linear-gradient(160deg, #b784ff, #7b3fd6); }
+  .ft .pipgrid { width: calc(var(--s) * .72); height: calc(var(--s) * .72); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; }
+  .ft .pipgrid i { width: calc(var(--s) * .17); height: calc(var(--s) * .17); border-radius: 50%; background: #fff;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.3); visibility: hidden; }
+  .ft .pipgrid i.on { visibility: visible; }
+  .ft.c-yellow .pipgrid i { background: #3b2a00; }
+  .ft .size { position: absolute; bottom: calc(var(--s) * .05); right: calc(var(--s) * .09); font-size: max(8px, calc(var(--s) * .14));
+    font-weight: 800; opacity: .8; text-shadow: none; letter-spacing: .04em; }
+  .ft .stamp { position: absolute; top: calc(var(--s) * .05); right: calc(var(--s) * .05); font-size: max(8px, calc(var(--s) * .14)); font-weight: 900;
+    z-index: 2; background: #fff; color: #1d5fd0; border-radius: 5px; padding: 0 3px; text-shadow: none; line-height: 1.35; }
+  .ft .stamp.sb { color: #d1233a; } .ft .stamp.sc { color: #9a6a00; }
+  .ft .mat { position: absolute; top: -9px; left: -6px; font-size: 9px; font-weight: 900; z-index: 2;
+    padding: 2px 5px; border-radius: 8px; background: #fff; color: #3a2a6a; text-shadow: none;
+    letter-spacing: .05em; box-shadow: 0 2px 6px rgba(0,0,0,.4); white-space: nowrap; }
+  .ft.m-glass::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(125deg, rgba(255,255,255,.55) 0 18%, transparent 30% 60%, rgba(255,255,255,.25) 70%, transparent 80%);
+    border: 2px solid rgba(255,255,255,.75); }
+  .ft.m-steel { box-shadow: 0 0 0 3px #b8c2cc, inset 0 -5px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.4); }
+  .ft.m-gold { box-shadow: 0 0 0 3px #ffd23f, inset 0 -5px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.4); }
+  .ft.m-gold .mat { background: #ffd23f; color: #3b2a00; } .ft.m-steel .mat { background: #b8c2cc; color: #1f2a33; }
+
+  .ft .sig { position: absolute; left: 10%; right: 10%; bottom: calc(var(--s) * -.15 - 3px); height: max(4px, calc(var(--s) * .07));
+    display: flex; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1.5px rgba(0,0,0,.4); }
+  .ft .sig span { height: 100%; }
+  .s-red { background: #ff5a60; } .s-blue { background: #4f86ff; } .s-green { background: #34c27a; } .s-yellow { background: #ffc928; } .s-purple { background: #a970ff; }
+  .chart { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+  .crow { display: flex; gap: 2px; align-items: center; }
+  .chart .cs { min-width: 17px; height: 15px; border-radius: 4px; font-size: 10px; font-weight: 900; color: #fff; display: grid; place-items: center;
+    padding: 0 3px; margin-right: 3px; text-shadow: 0 1px 0 rgba(0,0,0,.3); }
+  .chart .cn { min-width: 15px; height: 15px; border-radius: 4px; background: #ece6f6; color: #221a3a; font-size: 10px; font-weight: 900;
+    display: grid; place-items: center; padding: 0 2px; }
+  .chart .cn.st { box-shadow: inset 0 0 0 2px #e0a000; background: #fff6d6; }
+  .chart.md { gap: 3px; } .chart.md .crow { gap: 3px; }
+  .chart.md .cs, .chart.md .cn { height: 20px; min-width: 20px; font-size: 12px; border-radius: 5px; }
+  .dice { display: flex; gap: 8px; margin-top: 16px; height: 106px; flex: none; position: relative; }
+  .die { --s: 72px; touch-action: none; cursor: grab; transition: transform .16s ease, box-shadow .16s ease, opacity .16s; }
+  .die.held { transform: translateY(-12px); box-shadow: 0 0 0 3px #fff, 0 14px 20px rgba(0,0,0,.5); }
+  .die.held::after, .die.toss::after { position: absolute; bottom: -31px; left: -10px; right: -10px; text-align: center;
+    font-size: 11px; font-weight: 900; letter-spacing: .14em; color: #fff; text-shadow: none; }
+  .die.held::after { content: "KEEP"; }
+  .die.toss { transform: translateY(8px); opacity: .55; box-shadow: 0 0 0 3px #f0a020, 0 4px 8px rgba(0,0,0,.4); }
+  .die.toss::after { content: "REROLL"; color: #ffc25a; bottom: -29px; }
+  .die.inhand:not(.held):not(.toss) { box-shadow: 0 0 0 3px rgba(255,255,255,.35), inset 0 -7px 0 rgba(0,0,0,.25), 0 8px 16px rgba(0,0,0,.45); }
+  .dragging { transition: none !important; z-index: 20; cursor: grabbing; }
+  .die.rolling { animation: tumble .5s ease-out infinite; }
+  .land { animation: land .28s ease-out; }
+  .die.scoring { animation: scorejig .3s ease-out; transform: translateY(-10px) scale(1.08);
+    box-shadow: 0 0 0 4px #fff, 0 0 22px rgba(255,255,255,.55); z-index: 5; }
+  .crack { animation: crack .5s ease-in forwards; }
+  @keyframes tumble { 0% { transform: translateY(0) rotate(0); } 35% { transform: translateY(-30px) rotate(150deg); }
+    70% { transform: translateY(-6px) rotate(290deg); } 100% { transform: translateY(0) rotate(360deg); } }
+  @keyframes land { 0% { transform: scale(1.18, .8); } 60% { transform: scale(.95, 1.06); } 100% { transform: scale(1); } }
+  @keyframes scorejig { 0% { transform: translateY(0) rotate(0) scale(1); } 40% { transform: translateY(-12px) rotate(-5deg) scale(1.14); }
+    70% { transform: translateY(-10px) rotate(3deg) scale(1.08); } 100% { transform: translateY(-10px) scale(1.08); } }
+  @keyframes crack { 0% { transform: none; filter: none; } 20% { transform: translateX(-4px) rotate(-6deg); } 40% { transform: translateX(4px) rotate(6deg); filter: brightness(1.6); }
+    100% { transform: translateY(18px) scale(.2) rotate(40deg); opacity: 0; } }
+
+  /* ---------- hand + points x bonus ---------- */
+  .handLabel { font-size: 18px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; height: 26px; white-space: nowrap; flex: none; }
+  .calc { display: flex; align-items: flex-start; gap: 10px; margin-top: 4px; flex: none; }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .slot .lbl { opacity: .75; }
+  .box { min-width: 96px; height: 50px; padding: 0 10px; border-radius: 12px; display: grid; place-items: center;
+    font-size: 28px; font-weight: 900; background: #100e18; border: 3px solid; }
+  .ptsBox { color: var(--pts); border-color: var(--pts); text-shadow: 0 0 14px var(--pts); }
+  .bonBox { color: var(--bon); border-color: var(--bon); text-shadow: 0 0 14px var(--bon); }
+  .sym { font-size: 26px; font-weight: 900; height: 50px; display: grid; place-items: center; }
+  .scoreOut { min-width: 110px; height: 50px; display: grid; place-items: center; font-size: 28px; font-weight: 900; color: #ffd23f; }
+  .ticker { height: 26px; margin-top: 4px; font-size: 15px; font-weight: 800; white-space: nowrap; opacity: 0; transition: opacity .2s; flex: none; }
+  .ticker .val { margin-left: 8px; font-weight: 900; }
+  .ticker .val.pts { color: var(--pts); } .ticker .val.bon { color: var(--bon); } .ticker .val.cash { color: #ffd23f; }
+  #hand.collapsed .ticker { opacity: 1; }
+  .btns { display: flex; gap: 14px; margin-top: auto; flex: none; }
+  .btn { padding: 0 20px; height: 48px; border-radius: 14px; font-size: 18px; font-weight: 900; letter-spacing: .02em;
+    box-shadow: inset 0 -5px 0 rgba(0,0,0,.25), 0 6px 12px rgba(0,0,0,.35); }
+  .btn.reroll { background: #f0a020; color: #2b1800; }
+  .btn.play { background: #2fb36b; color: #fff; }
+  .btn.ghost { background: rgba(255,255,255,.14); color: #fff; }
+  .btn.small { height: 38px; font-size: 15px; padding: 0 14px; }
+  .btn:not(:disabled):active { transform: translateY(2px); }
+  .pips { display: flex; gap: 5px; }
+  .pip { width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.18); }
+  .pip.on { background: #fff; }
+
+  /* ---------- score sheet ---------- */
+  .sheetWrap { width: 250px; flex: none; display: flex; flex-direction: column; gap: 6px; transition: width .25s ease; overflow: hidden; }
+  #hand.collapsed .sheetWrap { width: 40px; }
+  .sheetHead { height: 30px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    background: rgba(0,0,0,.28); border-radius: 10px; padding: 0 10px; font-size: 12px; font-weight: 900; letter-spacing: .08em; white-space: nowrap; }
+  #hand.collapsed .sheetHead { padding: 0; justify-content: center; }
+  #hand.collapsed .sheetHead .ttl { display: none; }
+  .collapsedTab { display: none; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 900;
+    letter-spacing: .2em; opacity: .7; align-self: center; margin-top: 8px; }
+  #hand.collapsed .collapsedTab { display: block; }
+  .sheet { flex: 1; min-height: 0; background: #f7f0de; color: #2a2016; border-radius: 12px; padding: 0 10px; display: flex; flex-direction: column;
+    background-image: repeating-linear-gradient(#f7f0de 0 25px, #e6dabd 25px 26px); box-shadow: 0 6px 14px rgba(0,0,0,.4); transition: opacity .2s; }
+  #hand.collapsed .sheet { opacity: 0; pointer-events: none; }
+  .lines { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding-bottom: 6px; }
+  .lines::-webkit-scrollbar { display: none; }
+  .line { display: flex; justify-content: space-between; gap: 6px; height: 26px; align-items: center;
+    font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .line .lab { overflow: hidden; text-overflow: ellipsis; }
+  .line .val { font-weight: 900; }
+  .line .val.pts { color: var(--pts-ink); } .line .val.bon { color: var(--bon-ink); } .line .val.cash { color: #9a6a00; } .line .val.bad { color: #8a2a00; }
+  .line.sec { font-weight: 900; }
+  .line.sec .lab::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px;
+    background: #2a2016; vertical-align: 1px; }
+  .line.sec.sw-red .lab::before { background: #d1343b; } .line.sec.sw-blue .lab::before { background: #2a5fe0; }
+  .line.sec.sw-green .lab::before { background: #1f9555; } .line.sec.sw-yellow .lab::before { background: #e0a000; }
+  .line.sec.sw-purple .lab::before { background: #7b3fd6; }
+  .line.head { font-size: 11px; font-weight: 900; letter-spacing: .12em; opacity: .55; text-transform: uppercase; }
+  .line.sub { padding-left: 16px; font-size: 13px; font-weight: 700; }
+  .line.sub .lab::before { content: "\21B3  "; opacity: .55; }
+  .line.result { border-top: 2px solid #2a2016; height: 30px; font-size: 15px; font-weight: 900; margin-top: 2px; }
+  .line.result .val { color: #9a6a00; font-size: 16px; }
+  .line.new .lab { animation: write .28s steps(12) both; }
+  .line.new .val { animation: valin .2s ease-out .22s both; }
+  @keyframes write { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  @keyframes valin { from { opacity: 0; transform: scale(1.6); } to { opacity: 1; transform: none; } }
+  .sheet .cw-red { color: #c62a31; } .sheet .cw-blue { color: #2453c7; } .sheet .cw-green { color: #17804a; }
+  .sheet .cw-yellow { color: #a87800; } .sheet .cw-purple { color: #6a2fc0; }
+  .cw-red { color: #ff7a7f; } .cw-blue { color: #79a8ff; } .cw-green { color: #5ee09b; }
+  .cw-yellow { color: #ffd34d; } .cw-purple { color: #c49bff; }
+
+  /* ---------- shop ---------- */
+  .shopTop { display: flex; width: 100%; align-items: center; justify-content: space-between; height: 56px; flex: none; }
+  .stall { position: relative; display: flex; align-items: flex-start; gap: 18px; margin-top: 4px; flex: none; }
+  .stall .shelf { position: absolute; left: -16px; right: -16px; top: 116px; height: 14px; border-radius: 4px;
+    background: linear-gradient(#9a6a3e, #5e3b1e); box-shadow: 0 8px 12px rgba(0,0,0,.5); }
+  .offers { display: flex; gap: 22px; }
+  .offer { width: 128px; display: flex; flex-direction: column; align-items: center; position: relative; cursor: pointer; }
+  .offer .bagSvg { width: 112px; height: 122px; animation: sway 3.4s ease-in-out infinite; transform-origin: 50% 28%;
+    filter: drop-shadow(0 8px 6px rgba(0,0,0,.45)); transition: transform .2s; }
+  .offer:nth-child(2) .bagSvg { animation-delay: -1.1s; } .offer:nth-child(3) .bagSvg { animation-delay: -2.2s; }
+  .offer.sel .bagSvg { animation: none; transform: translateY(-10px) scale(1.06); filter: drop-shadow(0 0 14px rgba(255,220,140,.7)) drop-shadow(0 12px 8px rgba(0,0,0,.5)); }
+  @keyframes sway { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+  .ptag { position: absolute; top: 34px; right: 2px; background: #f4e6c4; color: #3b2408; font-weight: 900; font-size: 14px; padding: 2px 7px 2px 10px;
+    border-radius: 3px 6px 6px 3px; box-shadow: 0 3px 6px rgba(0,0,0,.4); transform: rotate(8deg); }
+  .ptag::before { content: ""; position: absolute; left: 3px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: #3b2408; }
+  .offer .oname { font-size: 15px; font-weight: 900; margin-top: 14px; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .offer .odesc { font-size: 12px; font-weight: 700; opacity: .75; margin-top: 1px; text-align: center; height: 30px; }
+  .offer .buy { display: none; height: 30px; padding: 0 16px; border-radius: 10px; background: #ffd23f; color: #3b2a00; font-weight: 900; font-size: 15px;
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.2); margin-top: 1px; }
+  .offer.sel .odesc { display: none; } .offer.sel .buy { display: block; animation: slam .25s ease-out; }
+  .offer.sold { cursor: default; } .offer.sold .bagSvg, .offer.sold .ptag { visibility: hidden; }
+  .offer.sold .soldMark { display: grid; }
+  .soldMark { display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%) rotate(-10deg); place-items: center;
+    border: 3px solid rgba(255,255,255,.35); color: rgba(255,255,255,.45); font-weight: 900; letter-spacing: .15em; padding: 2px 10px; border-radius: 8px; }
+  .offerSide { display: flex; flex-direction: column; justify-content: center; gap: 8px; height: 116px; }
+  .bagSvg .ruffle, .bagSvg .tie, .bagSvg .mouth { transition: transform .25s ease, opacity .25s ease; transform-box: view-box; transform-origin: 60px 36px; }
+  .bagSvg .mouth { opacity: 0; }
+  .bagSvg.open .ruffle { transform: scale(1.45, .8) translateY(-4px); }
+  .bagSvg.open .tie { transform: translateY(6px) scaleX(1.25); opacity: 0; }
+  .bagSvg.open .mouth { opacity: 1; }
+  .bagStage { position: absolute; left: 50%; top: 50%; width: 190px; height: 208px; margin: -104px 0 0 -95px; z-index: 1; }
+  .bagStage .bagSvg { width: 100%; height: 100%; filter: drop-shadow(0 0 30px rgba(255,220,140,.35)); }
+  .bagStage.shaking .bagSvg { animation: bagShake .75s ease-in-out; transform-origin: 50% 80%; }
+  @keyframes bagShake { 0%,100% { transform: rotate(0); } 15% { transform: rotate(-7deg); } 30% { transform: rotate(7deg) translateY(-4px); }
+    45% { transform: rotate(-9deg); } 60% { transform: rotate(9deg) translateY(-6px); } 80% { transform: rotate(-3deg) translateY(-2px); } }
+  .rackWrap { margin-top: auto; width: 100%; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .rackLabels { display: flex; gap: 22px; font-size: 10px; font-weight: 900; letter-spacing: .14em; opacity: .65; margin-bottom: 4px; }
+  .rack { display: flex; gap: 8px; height: 72px; align-items: flex-start; padding-top: 6px; }
+  .rack .ft { --s: 52px; cursor: grab; touch-action: none; transition: transform .15s; }
+  .rack .ft:nth-child(6) { margin-left: 22px; }
+  .rack .ft.sel { transform: translateY(-6px); box-shadow: 0 0 0 3px #fff, 0 10px 16px rgba(0,0,0,.5); }
+  .facePop { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); background: #fff; color: #221a3a; border-radius: 14px;
+    padding: 8px 10px; box-shadow: 0 10px 24px rgba(0,0,0,.55); display: none; z-index: 30; max-width: 560px; }
+  .facePop.show { display: block; animation: slam .25s ease-out; }
+  .facePop .fpTitle { font-size: 12px; font-weight: 900; margin-bottom: 6px; }
+  .faceRow { display: flex; flex-wrap: wrap; gap: 5px; }
+  .faceRow .ft { --s: 30px; }
+
+  /* ---------- pack opening ---------- */
+  #packOv { background: radial-gradient(ellipse at 50% 55%, rgba(60,36,14,.95), rgba(14,8,4,.97)); flex-direction: column; gap: 6px; }
+  .packBox { width: 130px; height: 160px; border-radius: 18px; display: grid; place-items: center; font-size: 60px;
+    box-shadow: 0 0 40px rgba(255,255,255,.25); animation: packShake .7s ease-in-out; }
+  .packBox.burst { animation: burst .3s ease-out forwards; }
+  @keyframes packShake { 0%,100% { transform: rotate(0); } 15% { transform: rotate(-8deg) scale(1.05); } 30% { transform: rotate(8deg) scale(1.08); }
+    45% { transform: rotate(-10deg) scale(1.1); } 60% { transform: rotate(10deg) scale(1.12); } 80% { transform: rotate(-4deg) scale(1.15); } }
+  @keyframes burst { to { transform: scale(2.2); opacity: 0; filter: brightness(3); } }
+  .packTitle { font-size: 22px; font-weight: 900; text-align: center; }
+  .packTitle small { display: block; font-size: 14px; font-weight: 700; opacity: .7; margin-top: 2px; }
+  .cards { display: flex; gap: 16px; position: relative; z-index: 2; }
+  .pcard { width: 176px; height: 240px; border-radius: 16px; background: #fff; color: #221a3a; padding: 12px; display: flex; flex-direction: column;
+    align-items: center; text-align: center; cursor: pointer; box-shadow: 0 12px 26px rgba(0,0,0,.5); animation: dealIn .4s cubic-bezier(.2,1.3,.4,1) both;
+    transition: transform .15s, opacity .2s; }
+  .pcard:active { transform: scale(.97); }
+  .pcard.taken { transform: translateY(-14px) scale(1.06); box-shadow: 0 0 0 4px #ffd23f, 0 16px 30px rgba(0,0,0,.6); }
+  .pcard.faded { opacity: 0; transform: translateY(30px); }
+  @keyframes dealIn { from { opacity: 0; transform: translateY(60px) rotate(8deg) scale(.8); } to { opacity: 1; transform: none; } }
+  .pcard .art { height: 78px; display: grid; place-items: center; font-size: 46px; }
+  .pcard .art .ft { --s: 56px; }
+  .pcard .chart { margin-top: 6px; align-self: center; }
+  .pcard.dieCard .art { height: 64px; } .pcard.dieCard .ctext { font-size: 12px; line-height: 1.2; margin-top: 2px; }
+  .pcard.fromBag { animation: none; }
+  .pcard .cname { font-size: 16px; font-weight: 900; margin-top: 4px; }
+  .pcard .ctext { font-size: 13px; font-weight: 700; opacity: .8; margin-top: 4px; line-height: 1.3; }
+  .pcard .faceRow { justify-content: center; margin-top: auto; gap: 3px; }
+  .pcard .faceRow .ft { --s: 20px; font-size: 11px; }
+  .pcard .take { margin-top: auto; font-size: 12px; font-weight: 900; letter-spacing: .12em; color: #2fb36b; }
+  .lvlBig { font-size: 26px; font-weight: 900; margin-top: 6px; }
+  .lvlBig .arrow { opacity: .4; margin: 0 6px; }
+  .target { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .target .rack .ft { cursor: pointer; }
+  .target .faceRow { max-width: 600px; justify-content: center; gap: 8px; min-height: 52px; }
+  .target .faceRow .ft { --s: 48px; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .target .faceRow .ft.pick { transform: translateY(-6px); box-shadow: 0 0 0 4px #ffd23f, 0 10px 16px rgba(0,0,0,.5); }
+  .target .faceRow .ft.src { box-shadow: 0 0 0 4px #4f9bff, 0 10px 16px rgba(0,0,0,.5); }
+  .target .msg { height: 26px; font-size: 14px; font-weight: 800; color: #ffc25a; display: flex; align-items: center; gap: 8px; }
+  .target .msg .ft { --s: 24px; }
+  .rowBtns { display: flex; gap: 12px; }
+  .glowFace { animation: glowFace .5s ease; }
+  @keyframes glowFace { 0%,100% { filter: none; } 40% { filter: brightness(2) drop-shadow(0 0 14px #ffd23f); transform: scale(1.25); } }
+
+  /* ---------- scoring effects ---------- */
+  .pop { position: absolute; transform: translate(-50%, -100%); font-weight: 900; font-size: 27px; white-space: nowrap;
+    -webkit-text-stroke: 6px #0b0a18; paint-order: stroke fill; animation: popup .8s ease-out forwards; }
+  .pop.pts { color: var(--pts); } .pop.bon { color: var(--bon); } .pop.cash { color: #ffd23f; } .pop.bad { color: #ffb38a; }
+  .pop.xbon { color: #fff; background: var(--bon); padding: 0 8px; border-radius: 8px; -webkit-text-stroke: 0; }
+  @keyframes popup { 0% { opacity: 0; transform: translate(-50%, -60%) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -110%) scale(1.15); }
+    70% { opacity: 1; transform: translate(-50%, -140%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -170%) scale(1); } }
+  .bump { animation: bump .22s ease-out; }
+  @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  .glowP { box-shadow: 0 0 24px var(--pts); } .glowB { box-shadow: 0 0 24px var(--bon); }
+  .slam { animation: slam .45s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes slam { 0% { transform: scale(2.2); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .flash { animation: flash .4s ease; }
+  @keyframes flash { 0%,100% { filter: none; } 40% { filter: brightness(1.8) drop-shadow(0 0 10px #fff); } }
+  .shake { animation: shake .3s ease; }
+  @keyframes shake { 0%,100% { transform: none; } 20% { transform: translate(-4px, 2px); } 40% { transform: translate(4px, -2px); }
+    60% { transform: translate(-3px, -1px); } 80% { transform: translate(2px, 1px); } }
+
+  /* ---------- overlays ---------- */
+  .overlay { position: absolute; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: rgba(5,4,12,.7); }
+  .overlay.show { display: flex; }
+  .card { background: #1d1838; border-radius: 20px; padding: 18px 26px 20px; text-align: center; width: 400px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.6); animation: slam .4s cubic-bezier(.2,1.4,.4,1); }
+  .card h2 { margin: 0 0 4px; font-size: 30px; }
+  .card .sub { margin: 0 0 10px; font-size: 15px; color: #cfc6ee; font-weight: 700; }
+  .cashLine { display: flex; justify-content: space-between; align-items: center; height: 34px; font-size: 16px; font-weight: 800;
+    border-bottom: 1px dashed rgba(255,255,255,.15); animation: slidein .25s ease-out; }
+  .cashLine .coins { color: #ffd23f; font-size: 20px; font-weight: 900; letter-spacing: 1px; }
+  .cashLine .coins span { display: inline-block; animation: valin .18s ease-out both; }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+  #ovBtn { margin-top: 14px; min-width: 220px; }
+  #ovBtn.cash { background: #ffd23f; color: #3b2a00; }
+  .set { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 12px 0; font-size: 16px; font-weight: 800; }
+  .seg { display: flex; background: rgba(0,0,0,.35); border-radius: 12px; padding: 3px; }
+  .seg button { padding: 8px 14px; border-radius: 9px; font-size: 15px; font-weight: 900; opacity: .6; }
+  .seg button.on { background: #fff; color: #1d1838; opacity: 1; }
+  .lvlTable { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; text-align: left; margin: 6px 0 12px; }
+  .lvlTable div { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; height: 22px; align-items: center; gap: 8px; }
+  .lvlTable .h { font-size: 11px; letter-spacing: .12em; opacity: .55; }
+  .lvlTable .p { color: var(--pts); } .lvlTable .b { color: var(--bon); } .lvlTable .lv { opacity: .6; font-size: 11px; }
+  #levelsOv .card { width: 520px; }
+
+  /* ---------- prototype chrome (not part of the design) ---------- */
+  #bar { position: fixed; bottom: 6px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 6px;
+    align-items: center; background: #fff; color: #111; border-radius: 999px; padding: 4px 6px; white-space: nowrap;
+    font: 700 13px system-ui, sans-serif; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  #bar button { background: #eee; color: #111; border-radius: 999px; height: 28px; padding: 0 11px; font: inherit; }
+  #notes { position: fixed; z-index: 99; top: 8px; right: 8px; bottom: 52px; width: min(380px, 92vw); overflow: auto;
+    background: #fff; color: #1a1a1a; border-radius: 14px; padding: 14px 16px; font: 14px/1.4 system-ui, sans-serif;
+    display: none; box-shadow: 0 8px 30px rgba(0,0,0,.6); }
+  #notes.show { display: block; }
+  #notes h3 { margin: 10px 0 4px; font-size: 16px; } #notes ol { padding-left: 20px; margin: 6px 0; } #notes li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs><radialGradient id="bagShade" cx="36%" cy="38%" r="75%">
+  <stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".38"/></radialGradient></defs></svg>
+<div id="wrap"><div id="stage">
+
+  <!-- ===================== hand screen ===================== -->
+  <div class="screen" id="hand">
+    <aside class="side">
+      <div class="roundCard" data-el="roundCard"><div class="rname" data-el="rname"></div><div class="ante" data-el="ante"></div></div>
+      <div class="goal"><div class="lbl">Score to beat</div><div class="big" data-el="target"></div></div>
+      <div class="goal round"><div class="lbl">Round score</div><div class="big" data-el="round"></div></div>
+      <div class="stats"><div><div class="lbl">Hands</div><div class="pips" data-el="hands"></div></div>
+        <div><div class="lbl">Rerolls</div><div class="pips" data-el="rerolls"></div></div></div>
+      <div data-el="reserveWrap"><div class="lbl">Reserve</div><div class="reserve" data-el="reserve"></div></div>
+      <div class="sideFoot"><div class="money" data-el="money"></div><button class="gear" data-act="settings">&#9881;&#xFE0E;</button></div>
+    </aside>
+    <main>
+      <div class="relics" data-el="relics"></div>
+      <div class="dice" data-el="dice"></div>
+      <div class="handLabel" data-el="handLabel"></div>
+      <div class="calc">
+        <div class="slot"><div class="box ptsBox" data-el="pts"></div><div class="lbl">Points</div></div>
+        <div class="sym">&times;</div>
+        <div class="slot"><div class="box bonBox" data-el="bon"></div><div class="lbl">Bonus</div></div>
+        <div class="scoreOut" data-el="score"></div>
+      </div>
+      <div class="ticker" data-el="ticker"></div>
+      <div class="btns"><button class="btn reroll" data-act="reroll"></button><button class="btn play" data-act="play">Play hand</button></div>
+    </main>
+    <div class="sheetWrap">
+      <button class="sheetHead" data-act="sheet"><span class="ttl" data-el="sheetTitle">SCORE SHEET</span><span data-el="sheetArrow"></span></button>
+      <div class="collapsedTab">SCORE SHEET</div>
+      <div class="sheet"><div class="lines" data-el="lines"></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== shop screen ===================== -->
+  <div class="screen" id="shop">
+    <aside class="side">
+      <div class="roundCard shopCard"><div class="rname">Shop</div><div class="ante" data-el="shopAnte"></div></div>
+      <div class="goal"><div class="lbl">Next round</div><div class="big" style="font-size:19px" data-el="nextName"></div></div>
+      <div class="goal"><div class="lbl">Score to beat</div><div class="big" data-el="nextTarget"></div></div>
+      <button class="btn play small" data-act="nextRound" style="margin-top:6px">Next round</button>
+      <div class="sideFoot"><div class="money" data-el="shopMoney"></div><button class="gear" data-act="settings">&#9881;&#xFE0E;</button></div>
+    </aside>
+    <main>
+      <div class="shopTop"><div class="relics" data-el="shopRelics"></div><button class="btn ghost small" data-act="levels">Hand levels</button></div>
+      <div class="stall"><div class="shelf"></div><div class="offers" data-el="offers"></div>
+        <div class="offerSide"><button class="btn reroll small" data-act="shopReroll"></button></div></div>
+      <div class="rackWrap">
+        <div class="facePop" data-el="facePop"><div class="fpTitle" data-el="fpTitle"></div><div data-el="fpFaces"></div></div>
+        <div class="rackLabels"><span data-el="rolledLbl">ROLLED</span><span>RESERVE</span></div>
+        <div class="rack" data-el="rack"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="fx"></div>
+
+  <!-- ===================== overlays ===================== -->
+  <div class="overlay" id="overlay"><div class="card"><h2 id="ovTitle"></h2><div class="sub" id="ovSub"></div>
+    <div id="cashLines"></div><button class="btn play" id="ovBtn"></button></div></div>
+  <div class="overlay" id="packOv"></div>
+  <div class="overlay" id="settings"><div class="card"><h2>Settings</h2>
+    <div class="set"><span>Tapping a die</span><div class="seg" data-set="tap"><button data-v="keep">Keeps it</button><button data-v="reroll">Rerolls it</button></div></div>
+    <div class="set"><span>d4 and d6 faces</span><div class="seg" data-set="faces"><button data-v="pips">Pips</button><button data-v="numbers">Numbers</button></div></div>
+    <button class="btn play" id="setDone">Done</button></div></div>
+  <div class="overlay" id="levelsOv"><div class="card"><h2>Hand levels</h2><div class="lvlTable" id="lvlTable"></div>
+    <button class="btn play small" id="levelsDone">Done</button></div></div>
+</div></div>
+
+<div id="bar"><button id="sndBtn"></button><button id="shopBtn">Shop now (+$20)</button><button id="newBtn">New run</button><button id="notesBtn">What's on screen</button></div>
+<div id="notes"></div>
+
+<script>
+// ================================================================ content (mirrors src/shared/Content.luau)
+const COLORS = ["red", "blue", "green", "yellow", "purple"];
+const NUMBER_HANDS = { five: ["Five of a Kind", 150, 50], four: ["Four of a Kind", 80, 35], large_straight: ["Large Straight", 60, 30],
+  full_house: ["Full House", 50, 25], small_straight: ["Small Straight", 40, 20], three: ["Three of a Kind", 35, 20],
+  two_pair: ["Two Pair", 25, 15], pair: ["Pair", 15, 10], high: ["High Die", 5, 5] };
+const COLOR_HANDS = { flush: ["Flush", 10, 3], c_four: ["Color Four", 7, 3], c_full_house: ["Color Full House", 6, 2], rainbow: ["Rainbow", 5, 2],
+  c_three: ["Color Three", 4, 2], c_two_pair: ["Two Color Pair", 3, 1], c_pair: ["Color Pair", 2, 1] };
+const BASE_TARGETS = [150, 400, 1000, 2500, 6000, 13000, 25000, 45000];
+const ROUNDS = [["Small Round", 1, 3], ["Big Round", 1.5, 4], ["Boss Round", 2, 5]];
+const cap = s => s[0].toUpperCase() + s.slice(1);
+const rnd = n => Math.floor(Math.random() * n);
+const pick = arr => arr[rnd(arr.length)];
+const sample = (arr, n) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, n); };
+const face = (n, color, stamp) => ({ n, color, stamp });
+const PIP_CELLS = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+
+const MATS = {
+  plain: { badge: "", text: "" },
+  glass: { badge: "GLASS ×2", text: "×2 bonus when it scores. 1 in 4: that face shatters" },
+  steel: { badge: "STEEL", text: "In reserve: ×1.5 bonus every hand" },
+  gold:  { badge: "GOLD", text: "In reserve: +$3 for each round you win" },
+};
+const STAMPS = {
+  pts30: { name: "+30 Points", badge: "+30", cls: "", text: "This face gives +30 points when it scores" },
+  bon4:  { name: "+4 Bonus", badge: "+4", cls: "sb", text: "This face gives +4 bonus when it scores" },
+  x15:   { name: "×1.5 Bonus", badge: "×1.5", cls: "sb", text: "This face gives ×1.5 bonus when it scores" },
+  coin:  { name: "Coin", badge: "$2", cls: "sc", text: "This face gives $2 when it scores" },
+  peak:  { name: "Peak", badge: "5+", cls: "sb", text: "×2 bonus when this face scores, if it's 5 or more" },
+};
+const TOOLS = {
+  chisel: { name: "Chisel", icon: "⛏️", target: "face", verb: "Chisel it", text: () => "Remove a face you choose" },
+  hammer: { name: "Hammer", icon: "🔨", target: "die", verb: "Hammer it", text: () => "Knock off 30–60% of a die's faces at random" },
+  forge:  { name: "Forge", icon: "⚒️", target: "face", verb: "Forge it", text: o => `Set a face to ${o.value}` },
+  copy:   { name: "Copy", icon: "🪞", target: "two", verb: "Copy it", text: () => "Copy a face, stamp included, onto another face" },
+  paint:  { name: "Paint", icon: "🖌️", target: "face", verb: "Paint it", text: o => `Paint a face <span class="cw-${o.color}" style="filter:brightness(.7)">${o.color}</span>` },
+};
+const PACKS = {
+  dice:     { name: "Dice Bag", icon: "🎲", price: 4, color: "#3466d8", desc: "Pick 1 of 3 dice" },
+  workshop: { name: "Tool Bag", icon: "🔨", price: 4, color: "#c98a1a", desc: "Pick 1 of 3 tools" },
+  stamp:    { name: "Stamp Bag", icon: "🔖", price: 5, color: "#8a4fd6", desc: "Pick 1 of 3 stamps" },
+  ledger:   { name: "Level-Up Bag", icon: "📒", price: 3, color: "#239a5a", desc: "Level up 1 of 3 hands" },
+  relic:    { name: "Relic Bag", icon: "🏺", price: 6, color: "#c8363c", desc: "Pick 1 of 3 relics" },
+};
+const PACK_WEIGHTS = { dice: 3, workshop: 3, stamp: 2, ledger: 2, relic: 2 };
+const standard = (size, colors, material = "plain") => ({ size: "d" + size, material,
+  faces: Array.from({ length: size }, (_, k) => face(k + 1, colors[k % colors.length])) });
+const TEMPLATES = [
+  { title: "Solid d6", w: 4, build: () => standard(6, [pick(COLORS)]) },
+  { title: "High d8", sub: "Rolls 5–8", w: 3, build: () => { const c = pick(COLORS); return { size: "d8", material: "plain", faces: [5,5,6,6,7,7,8,8].map(n => face(n, c)) }; } },
+  { title: "Rainbow d4", w: 3, build: () => { const cs = sample(COLORS, 4); return standard(4, cs); } },
+  { title: "Twin d6", w: 3, build: () => { const c = pick(COLORS), n = 1 + rnd(6);
+    return { size: "d6", material: "plain", faces: [n, n, n, n, n < 6 ? n + 1 : n - 1, n > 1 ? n - 1 : n + 1].map(v => face(v, c)) }; } },
+  { title: "Two-tone d6", w: 3, build: () => { const [a, b] = sample(COLORS, 2); return standard(6, [a, a, a, b, b, b].map((c, k) => c)); } },
+  { title: "Glass d12", w: 2, build: () => standard(12, sample(COLORS, 3), "glass") },
+  { title: "Steel d6", w: 2, build: () => standard(6, [pick(COLORS)], "steel") },
+  { title: "Gold d4", w: 2, build: () => standard(4, [pick(COLORS)], "gold") },
+  { title: "Big d20", w: 2, build: () => standard(20, COLORS) },
+  { title: "Stamped d6", w: 2, build: () => { const d = standard(6, [pick(COLORS)]); d.faces[rnd(6)].stamp = pick(["pts30", "bon4", "coin"]); return d; } },
+];
+const RELIC_POOL = [
+  { id: "evenkeel", name: "Even Keel", icon: "⚖️", text: "+3 bonus for each even face", onFace: f => f.n % 2 === 0 ? { bon: 3, why: `${f.n} is even` } : null },
+  { id: "oddjob", name: "Odd Job", icon: "🎯", text: "+20 points for each odd face", onFace: f => f.n % 2 ? { pts: 20, why: `${f.n} is odd` } : null },
+  { id: "crimson", name: "Crimson", icon: "🔥", text: "Red faces: +4 bonus", onFace: f => f.color === "red" ? { bon: 4, why: "red face" } : null },
+  { id: "azure", name: "Azure", icon: "💧", text: "Blue faces: +4 bonus", onFace: f => f.color === "blue" ? { bon: 4, why: "blue face" } : null },
+  { id: "snake", name: "Snake Eyes", icon: "🐍", text: "Each 1 that scores: ×1.5 bonus", onFace: f => f.n === 1 ? { xbon: 1.5, why: "rolled a 1" } : null },
+  { id: "heavy", name: "Heavy Hand", icon: "🪨", text: "+1 bonus for every 5 in the Total", onHand: c => c.total >= 5 ? { bon: Math.floor(c.total / 5), why: `Total ${c.total}` } : null },
+  { id: "patience", name: "Patience", icon: "⏳", text: "+4 bonus for each unused reroll", onHand: c => c.rerolls ? { bon: 4 * c.rerolls, why: `${c.rerolls} unused` } : null },
+  { id: "mono", name: "Monochrome", icon: "🎨", text: "+2 bonus for each die of your most common color", onHand: c => ({ bon: 2 * c.topColor, why: `${c.topColor} match` }) },
+  { id: "summit", name: "Summit", icon: "⛰️", text: "×2 bonus if any die rolls its highest face", onHand: c => c.anyTop ? { xbon: 2, why: "top face" } : null },
+];
+const RELIC_SLOTS = 5, MAX_DICE = 8, HAND_SIZE = 5;
+
+// ================================================================ state
+// S.run is the run (persists across rounds); the rest is the current round.
+const S = { tap: "keep", faces: "pips", sheetOpen: true, run: null };
+const R = () => S.run;
+function starterDice() {
+  return Array.from({ length: 6 }, (_, i) => ({ size: "d6", material: "plain",
+    faces: Array.from({ length: 6 }, (_, k) => face(k + 1, COLORS[(k + i) % COLORS.length])) }));
+}
+function newRun() {
+  S.run = { ante: 1, round: 0, money: 4, dice: starterDice(), relics: [], levels: {}, shop: null, diceBagShown: 0 };
+}
+function curRound() {
+  const [name, mult, pay] = ROUNDS[R().round];
+  return { name, ante: R().ante, target: Math.floor(BASE_TARGETS[Math.min(R().ante, 8) - 1] * mult), pay, boss: R().round === 2 };
+}
+function resetRound() {
+  Object.assign(S, { handsLeft: 3, rerollsLeft: 2, roundScore: 0, marked: Array(HAND_SIZE).fill(false),
+    face: R().dice.slice(0, HAND_SIZE).map(d => rnd(d.faces.length)), phase: "rolling" });
+}
+const handDice = () => R().dice.slice(0, HAND_SIZE);
+const reserveDice = () => R().dice.slice(HAND_SIZE);
+const faces = () => S.face.map((fi, i) => R().dice[i].faces[fi]);
+const rerollSet = () => [0, 1, 2, 3, 4].filter(i => S.tap === "keep" ? !S.marked[i] : S.marked[i]);
+const lvl = id => R().levels[id] || 1;
+const handPts = id => NUMBER_HANDS[id][1] + NUMBER_HANDS[id][2] * (lvl(id) - 1);
+const handBon = id => COLOR_HANDS[id][1] + COLOR_HANDS[id][2] * (lvl(id) - 1);
+const lvTag = id => lvl(id) > 1 ? ` <small style="opacity:.6">Lv ${lvl(id)}</small>` : "";
+
+// ================================================================ sound (Web Audio, synthesized)
+const AC = { ctx: null, on: true, out: null, noise: null, armed: false };
+function audio() {
+  if (!AC.armed) return null;
+  if (!AC.ctx) {
+    const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+    AC.ctx = new C();
+    const lp = AC.ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3800; lp.Q.value = .5;
+    const g = AC.ctx.createGain(); g.gain.value = .55; lp.connect(g).connect(AC.ctx.destination); AC.out = lp;
+    AC.noise = AC.ctx.createBuffer(1, AC.ctx.sampleRate, AC.ctx.sampleRate);
+    const d = AC.noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (AC.ctx.state === "suspended") AC.ctx.resume();
+  return AC.on ? AC.ctx : null;
+}
+addEventListener("pointerdown", () => { AC.armed = true; audio(); });
+function tone(freq, dur, type = "sine", vol = .3, when = 0, slideTo) {
+  const c = audio(); if (!c) return; const t = c.currentTime + when;
+  const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.out); o.start(t); o.stop(t + dur + .03);
+}
+function hiss(dur, freq, q = 1, vol = .3, when = 0, sweepTo) {
+  const c = audio(); if (!c) return; const t = c.currentTime + when;
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = AC.noise;
+  f.type = "bandpass"; f.frequency.setValueAtTime(freq, t); if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur); f.Q.value = q;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(g).connect(AC.out); s.start(t, Math.random() * .5); s.stop(t + dur + .03);
+}
+const semis = k => Math.pow(2, Math.min(k, 24) / 12);
+const SFX = {
+  rattle() { for (let k = 0; k < 3; k++) hiss(.03, 1600 + Math.random() * 1600, 2.5, .3, k * .045 + Math.random() * .02); },
+  land() { tone(190, .12, "sine", .4, 0, 75); hiss(.04, 1100, 1.5, .2); },
+  mark() { tone(620, .06, "triangle", .2); },
+  slide() { hiss(.05, 900, 1.2, .12); },
+  hand() { tone(294, .16, "triangle", .3); tone(440, .18, "triangle", .24, .08); },
+  pts(k) { tone(330 * semis(k), .12, "triangle", .32); },
+  bon(k) { const f = 440 * semis(k); tone(f, .13, "triangle", .22); tone(f * 1.5, .12, "sine", .14, .03); },
+  xbon() { tone(130, .32, "triangle", .38, 0, 60); tone(660, .2, "triangle", .16, .03); tone(990, .24, "sine", .14, .07); },
+  coin() { tone(1175, .07, "triangle", .12); tone(1568, .28, "sine", .2, .05); },
+  write() { hiss(.14, 3000, .8, .05); },
+  slam() { tone(98, .5, "sine", .55, 0, 40); hiss(.22, 320, .7, .35); },
+  tick() { tone(980, .03, "triangle", .06); },
+  win() { [523, 659, 784, 1047].forEach((f, k) => tone(f, .3, "triangle", .24, k * .11)); },
+  lose() { [392, 330, 262].forEach((f, k) => tone(f, .34, "triangle", .22, k * .17)); },
+  rustle() { for (let k = 0; k < 5; k++) hiss(.09, 500 + Math.random() * 500, 1.2, .3, k * .14 + Math.random() * .03); },
+  pop() { tone(260, .14, "sine", .35, 0, 820); hiss(.05, 1500, 1, .2); },
+  draw(k) { tone(523 * semis(k * 4), .2, "triangle", .2); hiss(.12, 2400, 1, .1); },
+  chime() { tone(784, .4, "sine", .2); tone(1175, .5, "sine", .16, .06); tone(1568, .6, "sine", .1, .12); },
+  deal() { hiss(.08, 2200, 1, .12); },
+  crack() { hiss(.18, 700, .8, .45); tone(160, .12, "triangle", .3, 0, 70); hiss(.12, 2600, 2, .2, .05); },
+  clink() { tone(1760, .25, "triangle", .2); tone(2637, .3, "sine", .12, .01); tone(110, .15, "sine", .3); },
+  swish() { hiss(.3, 900, 1, .25, 0, 3200); },
+  thunk() { tone(140, .18, "sine", .45, 0, 60); hiss(.06, 800, 1, .25); },
+  levelup() { [440, 554, 659, 880].forEach((f, k) => tone(f, .18, "triangle", .2, k * .07)); },
+  nope() { tone(220, .12, "triangle", .2); tone(180, .16, "triangle", .2, .1); },
+};
+
+// ================================================================ hands (mirrors Hands.luau)
+function numberHand(vals) {
+  const count = {}; vals.forEach(v => count[v] = (count[v] || 0) + 1);
+  const counts = Object.values(count).sort((a, b) => b - a);
+  const uniq = [...new Set(vals)].sort((a, b) => a - b);
+  let run = 1, best = 1, bestEnd = uniq[0];
+  for (let i = 1; i < uniq.length; i++) { run = uniq[i] === uniq[i - 1] + 1 ? run + 1 : 1; if (run > best) { best = run; bestEnd = uniq[i]; } }
+  const kindDice = min => vals.map((v, i) => count[v] >= min ? i : -1).filter(i => i >= 0);
+  const straightDice = len => { const want = new Set(); for (let k = 0; k < len; k++) want.add(bestEnd - k);
+    const used = new Set(); return vals.map((v, i) => { if (want.has(v) && !used.has(v)) { used.add(v); return i; } return -1; }).filter(i => i >= 0); };
+  let id, dice;
+  if (counts[0] === 5) [id, dice] = ["five", kindDice(5)];
+  else if (counts[0] === 4) [id, dice] = ["four", kindDice(4)];
+  else if (best >= 5) [id, dice] = ["large_straight", straightDice(5)];
+  else if (counts[0] === 3 && counts[1] === 2) [id, dice] = ["full_house", kindDice(2)];
+  else if (best >= 4) [id, dice] = ["small_straight", straightDice(4)];
+  else if (counts[0] === 3) [id, dice] = ["three", kindDice(3)];
+  else if (counts[0] === 2 && counts[1] === 2) [id, dice] = ["two_pair", kindDice(2)];
+  else if (counts[0] === 2) [id, dice] = ["pair", kindDice(2)];
+  else { const hi = Math.max(...vals); [id, dice] = ["high", [vals.indexOf(hi)]]; }
+  return { id, name: NUMBER_HANDS[id][0], pts: handPts(id), dice };
+}
+function colorHand(cols) {
+  const count = {}; cols.forEach(c => count[c] = (count[c] || 0) + 1);
+  const byCount = Object.entries(count).sort((a, b) => b[1] - a[1]);
+  const [c1, n1] = byCount[0], [c2, n2] = byCount[1] || [null, 0];
+  const w = c => `<span class="cw-${c}">${cap(c)}</span>`;
+  let id, html;
+  if (n1 === 5) { id = "flush"; html = `${w(c1)} Flush`; }
+  else if (n1 === 4) { id = "c_four"; html = `${w(c1)} Four`; }
+  else if (n1 === 3 && n2 === 2) { id = "c_full_house"; html = `${w(c1)}-${w(c2)} House`; }
+  else if (byCount.length === 5) { id = "rainbow"; html = `<span class="cw-red">R</span><span class="cw-yellow">a</span><span class="cw-green">i</span><span class="cw-blue">n</span><span class="cw-purple">bow</span>`; }
+  else if (n1 === 3) { id = "c_three"; html = `${w(c1)} Three`; }
+  else if (n1 === 2 && n2 === 2) { id = "c_two_pair"; html = `${w(c1)} &amp; ${w(c2)} Pairs`; }
+  else { id = "c_pair"; html = `${w(c1)} Pair`; }
+  return { id, html, bon: handBon(id), top: n1 };
+}
+
+// ================================================================ scoring (mirrors Scoring.luau)
+// Sheet levels: "sec" = a die's own points or a whole-hand effect; "sub" = something a die triggered.
+function stampStep(f, i) {
+  const s = f.stamp; if (!s) return null;
+  if (s === "pts30") return { die: i, lvl: "sub", pts: 30, label: "+30 points stamp" };
+  if (s === "bon4") return { die: i, lvl: "sub", bon: 4, label: "+4 bonus stamp" };
+  if (s === "x15") return { die: i, lvl: "sub", xbon: 1.5, label: "×1.5 bonus stamp" };
+  if (s === "coin") return { die: i, lvl: "sub", money: 2, label: "Coin stamp" };
+  if (s === "peak" && f.n >= 5) return { die: i, lvl: "sub", xbon: 2, label: "Peak stamp" };
+  return null;
+}
+function scoreHand() {
+  const fs = faces(), vals = fs.map(f => f.n), total = vals.reduce((a, b) => a + b, 0);
+  const nh = numberHand(vals), ch = colorHand(fs.map(f => f.color));
+  const anyTop = fs.some((f, i) => f.n >= Math.max(...R().dice[i].faces.map(x => x.n)));
+  const steps = [{ src: "hand", pts: nh.pts, bon: ch.bon }];
+  fs.forEach((f, i) => {
+    const d = R().dice[i];
+    steps.push({ die: i, lvl: "sec", color: f.color, pts: f.n, label: `Rolled ${f.n}` });
+    const st = stampStep(f, i); if (st) steps.push(st);
+    if (d.material === "glass") steps.push({ die: i, lvl: "sub", xbon: 2, label: "Glass" });
+    R().relics.forEach(r => { const h = r.onFace && r.onFace(f); if (h) steps.push({ die: i, relic: r.id, lvl: "sub", ...h, label: `${r.name}: ${h.why}` }); });
+  });
+  const after = [];
+  reserveDice().forEach((d, k) => { if (d.material === "steel") after.push({ reserve: k, lvl: "sec", xbon: 1.5, label: "Steel die in reserve" }); });
+  const ctx = { total, rerolls: S.rerollsLeft, topColor: ch.top, anyTop };
+  R().relics.forEach(r => { const h = r.onHand && r.onHand(ctx); if (h) after.push({ relic: r.id, lvl: "sec", ...h, label: `${r.name}: ${h.why}` }); });
+  if (S.rerollsLeft > 0) after.push({ src: "money", lvl: "sec", money: S.rerollsLeft, label: `${S.rerollsLeft} unused reroll${S.rerollsLeft > 1 ? "s" : ""}` });
+  if (after.length) steps.push({ heading: "Whole hand" }, ...after);
+  return { nh, ch, total, steps };
+}
+const stepVal = st => st.pts ? [`+${st.pts} points`, "pts"] : st.bon ? [`+${st.bon} bonus`, "bon"]
+  : st.xbon ? [`×${st.xbon} bonus`, "bon"] : [`+$${st.money}`, "cash"];
+
+// ================================================================ helpers
+const $ = sel => document.querySelector(sel);
+const stage = $("#stage"), fx = $("#fx");
+const el = name => stage.querySelector(`[data-el="${name}"]`);
+const dieEl = i => $("#hand").querySelector(`[data-die="${i}"]`);
+const relicEl = id => $("#hand").querySelector(`[data-relic="${id}"]`);
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n).toLocaleString("en-US");
+const fmtB = n => Number.isInteger(n) ? fmt(n) : (Math.round(n * 10) / 10).toString();
+let scale = 1, speed = 1, gen = 0;
+const wait = ms => new Promise(r => setTimeout(r, ms * speed));
+function center(node) {
+  const a = node.getBoundingClientRect(), s = stage.getBoundingClientRect();
+  return { x: (a.left + a.width / 2 - s.left) / scale, top: (a.top - s.top) / scale };
+}
+function restart(node, cls) { if (!node) return; node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+function pop(node, text, kind) {
+  if (!node) return; const c = center(node), p = document.createElement("div");
+  p.className = `pop ${kind}`; p.textContent = text; p.style.left = c.x + "px"; p.style.top = Math.max(46, c.top) + "px";
+  fx.appendChild(p); setTimeout(() => p.remove(), 850);
+}
+function hit(node, glow) { if (!node) return; restart(node, "bump"); node.classList.add(glow); setTimeout(() => node.classList.remove(glow), 220); }
+function countTo(node, from, to, ms, onTick) {
+  const t0 = performance.now(), dur = ms * speed; let last = 0;
+  return new Promise(r => { const tick = now => { const k = Math.min(1, (now - t0) / dur);
+    node.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    if (onTick && now - last > 55) { last = now; onTick(); }
+    if (k < 1) requestAnimationFrame(tick); else { node.textContent = fmt(to); r(); } };
+    requestAnimationFrame(tick); });
+}
+function showScreen(id) { stage.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); }
+
+// ================================================================ face tiles (dice at every size)
+function faceInner(d, f) {
+  const pips = S.faces === "pips" && (d.size === "d6" || d.size === "d4") && PIP_CELLS[f.n];
+  const st = f.stamp && STAMPS[f.stamp];
+  return (pips ? `<div class="pipgrid">${Array.from({ length: 9 }, (_, k) => `<i class="${pips.includes(k) ? "on" : ""}"></i>`).join("")}</div>`
+    : `<span class="num">${f.n}</span>`) + (st ? `<span class="stamp ${st.cls}">${st.badge}</span>` : "");
+}
+// The color bar under a die: its faces' colors in proportion, so two dice showing the same face still look different.
+function sigHTML(d) {
+  const n = {}; d.faces.forEach(f => n[f.color] = (n[f.color] || 0) + 1);
+  return `<div class="sig">${COLORS.filter(c => n[c]).map(c => `<span class="s-${c}" style="flex:${n[c]}"></span>`).join("")}</div>`;
+}
+// Every face at a glance: one row per color, that color's numbers in order. Stamped faces get a gold ring.
+function faceChart(d, size = "") {
+  const by = {}; d.faces.forEach(f => (by[f.color] = by[f.color] || []).push(f));
+  return `<div class="chart ${size}">${COLORS.filter(c => by[c]).map(c => `<div class="crow"><span class="cs s-${c}">${by[c].length}</span>${
+    by[c].slice().sort((a, b) => a.n - b.n).map(f => `<span class="cn${f.stamp ? " st" : ""}"${f.stamp ? ` title="${STAMPS[f.stamp].name}"` : ""}>${f.n}</span>`).join("")}</div>`).join("")}</div>`;
+}
+// A whole die: shows face f, its size, its material badge and its color bar.
+function dieHTML(d, f, withBadge = true) {
+  return faceInner(d, f) + `<span class="size">${d.size}</span>` + (withBadge && MATS[d.material].badge ? `<span class="mat">${MATS[d.material].badge}</span>` : "") + sigHTML(d);
+}
+function bagSVG(p) {
+  const body = "M44 38 C 18 50, 8 80, 15 102 C 22 126, 98 126, 105 102 C 112 80, 102 50, 76 38 Z";
+  const ruff = "M40 37 Q27 16 41 9 Q51 18 60 7 Q69 18 79 9 Q93 16 80 37 Z";
+  return `<svg class="bagSvg" viewBox="0 0 120 132" style="color:${p.color}">
+    <g class="ruffle"><path d="${ruff}" fill="currentColor"/><path d="${ruff}" fill="rgba(0,0,0,.3)"/></g>
+    <ellipse class="mouth" cx="60" cy="35" rx="19" ry="5" fill="#160b04"/>
+    <path d="${body}" fill="currentColor"/><path d="${body}" fill="url(#bagShade)"/>
+    <path d="M30 62 C 21 82, 23 100, 33 112" stroke="rgba(255,255,255,.22)" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="M52 54 C 50 70, 52 92, 56 110 M70 52 C 74 68, 74 90, 70 110" stroke="rgba(0,0,0,.12)" stroke-width="2" fill="none"/>
+    <rect class="tie" x="37" y="32" width="46" height="9" rx="4.5" fill="#f1dfb0"/>
+    <text x="60" y="92" text-anchor="middle" font-size="32">${p.icon}</text></svg>`;
+}
+const topFace = d => d.faces.reduce((a, b) => b.n > a.n ? b : a, d.faces[0]);
+function tile(d, f, size, extraCls = "", die = false) {
+  return `<div class="ft c-${f.color} m-${die ? d.material : "plain"} ${extraCls}" style="--s:${size}px">${die ? dieHTML(d, f) : faceInner(d, f)}</div>`;
+}
+function facesRow(d, size) { return d.faces.map(f => tile(d, f, size)).join(""); }
+
+// ================================================================ drag to reorder (hand row and shop rack)
+function dragReorder(n, box, onSwap, onTap, canDrag) {
+  n.addEventListener("pointerdown", e => {
+    if (!canDrag()) return;
+    const startX = e.clientX, grab = (e.clientX - n.getBoundingClientRect().left) / scale;
+    let dragging = false; n.setPointerCapture(e.pointerId);
+    const move = ev => {
+      if (!dragging && Math.abs(ev.clientX - startX) > 8) { dragging = true; n.classList.add("dragging"); }
+      if (!dragging) return;
+      const left = (ev.clientX - box.getBoundingClientRect().left) / scale - grab, mid = left + n.offsetWidth / 2;
+      for (let moved = true; moved;) {
+        const kids = [...box.children], idx = kids.indexOf(n), next = kids[idx + 1], prev = kids[idx - 1]; moved = false;
+        if (next && mid > next.offsetLeft + next.offsetWidth / 2) { box.insertBefore(next, n); onSwap(idx, idx + 1); moved = true; }
+        else if (prev && mid < prev.offsetLeft + prev.offsetWidth / 2) { box.insertBefore(n, prev); onSwap(idx, idx - 1); moved = true; }
+        if (moved) { [...box.children].forEach((c, k) => c.dataset.i = k); SFX.slide(); }
+      }
+      n.style.transform = `translateX(${left - n.offsetLeft}px) translateY(-6px) scale(1.08)`;
+    };
+    const up = () => {
+      n.removeEventListener("pointermove", move); n.removeEventListener("pointerup", up); n.removeEventListener("pointercancel", up);
+      if (dragging) { n.classList.remove("dragging"); n.style.transform = ""; onTap(null); } else onTap(+n.dataset.i);
+    };
+    n.addEventListener("pointermove", move); n.addEventListener("pointerup", up); n.addEventListener("pointercancel", up);
+  });
+}
+const swapArr = (arrs, a, b) => arrs.forEach(arr => { [arr[a], arr[b]] = [arr[b], arr[a]]; });
+
+// ================================================================ hand screen: render
+function paintDie(node, i, f) {
+  const d = R().dice[i];
+  let cls = `ft die c-${f.color} m-${d.material}`;
+  if (S.marked[i]) cls += S.tap === "keep" ? " held" : " toss";
+  if (node.classList.contains("dragging")) cls += " dragging";
+  node.className = cls; node.innerHTML = dieHTML(d, f);
+}
+function makeDie(i) {
+  const n = document.createElement("div"); n.dataset.i = i; n.dataset.die = i;
+  dragReorder(n, el("dice"), (a, b) => { swapArr([R().dice, S.face, S.marked], a, b); [...el("dice").children].forEach((c, k) => c.dataset.die = k); },
+    i2 => { if (i2 !== null) { S.marked[i2] = !S.marked[i2]; SFX.mark(); } updateHand(); }, () => S.phase === "choosing");
+  return n;
+}
+function makeRelics(container, hand) {
+  container.innerHTML = "";
+  for (let k = 0; k < RELIC_SLOTS; k++) {
+    const r = R().relics[k], n = document.createElement("div");
+    if (!r) { n.className = "relic empty"; container.appendChild(n); continue; }
+    n.className = "relic"; if (hand) n.dataset.relic = r.id;
+    n.innerHTML = `<span class="icon">${r.icon}</span><span class="name">${r.name}</span><div class="tip"><b>${r.name}</b><br>${r.text}</div>`;
+    n.addEventListener("click", e => { e.stopPropagation(); const was = n.classList.contains("show");
+      stage.querySelectorAll(".relic.show").forEach(x => x.classList.remove("show")); if (!was) n.classList.add("show"); });
+    container.appendChild(n);
+  }
+}
+function pips(node, n, of) { node.innerHTML = Array.from({ length: of }, (_, k) => `<span class="pip${k < n ? " on" : ""}"></span>`).join(""); }
+function line(cls, label, val = "", kind = "") {
+  return `<div class="line new ${cls}"><span class="lab">${label}</span><span class="val ${kind}">${val}</span></div>`;
+}
+function sheetAdd(html) { const L = el("lines"); L.insertAdjacentHTML("beforeend", html); L.scrollTop = L.scrollHeight; }
+
+function updateHand() {
+  const fs = faces(), preview = scoreHand(), dc = el("dice"), rd = curRound();
+  if (dc.children.length !== HAND_SIZE) { dc.innerHTML = ""; for (let i = 0; i < HAND_SIZE; i++) dc.appendChild(makeDie(i)); }
+  fs.forEach((f, i) => { const n = dieEl(i); if (!n.classList.contains("rolling")) paintDie(n, i, f);
+    if (S.phase === "choosing" && preview.nh.dice.includes(i)) n.classList.add("inhand"); });
+  el("roundCard").classList.toggle("boss", rd.boss);
+  el("target").textContent = fmt(rd.target); el("round").textContent = fmt(S.roundScore);
+  el("money").textContent = "$" + R().money; el("rname").textContent = rd.name; el("ante").textContent = `Ante ${rd.ante} / 8`;
+  pips(el("hands"), S.handsLeft, 3); pips(el("rerolls"), S.rerollsLeft, 2);
+  const res = reserveDice();
+  el("reserveWrap").style.visibility = res.length ? "visible" : "hidden";
+  el("reserve").innerHTML = res.map((d, k) => tile(d, topFace(d), 30, "", true).replace('class="ft', `data-reserve="${k}" class="ft`)).join("");
+  el("reserve").querySelectorAll(".mat").forEach(m => m.remove());
+  const show = S.phase === "choosing";
+  el("handLabel").innerHTML = show ? `${preview.nh.name} · ${preview.ch.html}` : "&nbsp;";
+  el("pts").textContent = show ? fmt(preview.nh.pts) : ""; el("bon").textContent = show ? fmt(preview.ch.bon) : "";
+  if (show) { el("score").textContent = ""; el("ticker").textContent = ""; }
+  const rr = $("#hand [data-act=reroll]"), pl = $("#hand [data-act=play]");
+  rr.disabled = !show || S.rerollsLeft === 0 || rerollSet().length === 0; rr.textContent = `Reroll (${S.rerollsLeft})`;
+  pl.disabled = !show;
+  el("sheetArrow").textContent = S.sheetOpen ? "▶" : "◀";
+  $("#hand").classList.toggle("collapsed", !S.sheetOpen);
+}
+
+// ================================================================ hand screen: rolling
+async function roll(indices) {
+  const g = gen; S.phase = "rolling"; updateHand();
+  const rattle = setInterval(() => SFX.rattle(), 130); SFX.rattle();
+  await Promise.all(indices.map((i, k) => new Promise(res => {
+    const n = dieEl(i), d = R().dice[i]; n.classList.remove("land", "inhand"); n.classList.add("rolling");
+    const spin = setInterval(() => { paintDie(n, i, d.faces[rnd(d.faces.length)]); n.classList.add("rolling"); }, 70);
+    setTimeout(() => { clearInterval(spin); S.face[i] = rnd(d.faces.length);
+      n.classList.remove("rolling"); paintDie(n, i, faces()[i]); restart(n, "land"); SFX.land(); res(); }, 520 + k * 110);
+  })));
+  clearInterval(rattle);
+  if (g !== gen) return;
+  if (S.tap === "reroll") S.marked = S.marked.map(() => false);
+  S.phase = "choosing"; updateHand();
+}
+
+// ================================================================ hand screen: scoring playback
+async function play() {
+  const g = gen; S.phase = "scoring"; speed = 1; updateHand();
+  const res = scoreHand(); let pts = 0, bon = 0, dur = 420, k = 0;
+  const ptsEl = el("pts"), bonEl = el("bon"), ticker = el("ticker");
+  ptsEl.textContent = "0"; bonEl.textContent = "0";
+  el("lines").innerHTML = ""; el("sheetTitle").textContent = "SCORE SHEET";
+  $("#hand").querySelectorAll(".die").forEach(n => n.classList.remove("inhand"));
+  for (const st of res.steps) {
+    if (st.heading) { sheetAdd(line("head", st.heading)); continue; }
+    const dn = st.die != null ? dieEl(st.die) : null, rn = st.relic ? relicEl(st.relic) : null;
+    const resv = st.reserve != null ? el("reserve").querySelector(`[data-reserve="${st.reserve}"]`) : null;
+    $("#hand").querySelectorAll(".die.scoring").forEach(n => n !== dn && n.classList.remove("scoring"));
+    if (dn && !dn.classList.contains("scoring")) dn.classList.add("scoring");
+    if (rn) restart(rn, "trigger"); if (resv) restart(resv, "bump");
+    const src = rn || dn || resv || el("money");
+    if (st.src === "hand") {
+      const hl = el("handLabel"); hl.innerHTML = `${res.nh.name} · ${res.ch.html}`; restart(hl, "flash"); SFX.hand();
+      sheetAdd(line("head", "Hand") + line("sec", res.nh.name + lvTag(res.nh.id), `${st.pts} points`, "pts") + line("sec", res.ch.html + lvTag(res.ch.id), `${st.bon} bonus`, "bon"));
+      ticker.innerHTML = `${res.nh.name} · ${res.ch.html}`;
+      pop(ptsEl, `${st.pts}`, "pts"); pop(bonEl, `${st.bon}`, "bon");
+      pts = st.pts; bon = st.bon; ptsEl.textContent = fmt(pts); bonEl.textContent = fmt(bon); hit(ptsEl, "glowP"); hit(bonEl, "glowB");
+      await wait(dur + 200); if (g !== gen) return;
+      sheetAdd(line("head", "Dice"));
+      continue;
+    }
+    const [vt, vk] = stepVal(st);
+    sheetAdd(line(st.lvl + (st.lvl === "sec" && st.color ? ` sw-${st.color}` : ""), st.label, vt, vk)); SFX.write();
+    ticker.innerHTML = `${st.label}<span class="val ${vk}">${vt}</span>`;
+    if (st.pts) { pop(src, `+${st.pts}`, "pts"); SFX.pts(k++); pts += st.pts; ptsEl.textContent = fmt(pts); hit(ptsEl, "glowP"); }
+    else if (st.bon) { pop(src, `+${st.bon} bonus`, "bon"); SFX.bon(k++); bon += st.bon; bonEl.textContent = fmtB(bon); hit(bonEl, "glowB"); }
+    else if (st.xbon) { pop(src, `×${st.xbon} bonus`, "xbon"); SFX.xbon(); k++; bon *= st.xbon; bonEl.textContent = fmtB(bon); hit(bonEl, "glowB"); restart($("#hand"), "shake"); }
+    else if (st.money) { pop(src, `+$${st.money}`, "cash"); R().money += st.money; SFX.coin(); el("money").textContent = "$" + R().money; restart(el("money"), "bump"); }
+    await wait(dur); if (g !== gen) return; dur = Math.max(180, dur * 0.93);
+  }
+  $("#hand").querySelectorAll(".die.scoring").forEach(n => n.classList.remove("scoring"));
+  const score = Math.floor(pts * bon), sc = el("score");
+  sc.textContent = "= " + fmt(score); restart(sc, "slam"); SFX.slam(); restart($("#hand"), "shake");
+  sheetAdd(`<div class="line new result"><span class="lab">${fmt(pts)} × ${fmtB(bon)}</span><span class="val">${fmt(score)}</span></div>`);
+  el("sheetTitle").textContent = `LAST HAND · ${fmt(score)}`;
+  ticker.innerHTML = `${fmt(pts)} points × ${fmtB(bon)} bonus = <b>${fmt(score)}</b>`;
+  await wait(700); if (g !== gen) return;
+  // Glass: each glass face that scored has a 1 in 4 chance to shatter (removed from its die).
+  for (let i = 0; i < HAND_SIZE; i++) {
+    const d = R().dice[i];
+    if (d.material === "glass" && d.faces.length > 2 && Math.random() < 0.25) {
+      const f = d.faces[S.face[i]]; d.faces.splice(S.face[i], 1); S.face[i] = 0;
+      pop(dieEl(i), "Shattered!", "bad"); restart(dieEl(i), "shake"); SFX.crack();
+      sheetAdd(line("sec", `Glass face ${f.n} shattered`, `${d.faces.length} faces left`, "bad"));
+      await wait(700); if (g !== gen) return;
+    }
+  }
+  const before = S.roundScore; S.roundScore += score;
+  await countTo(el("round"), before, S.roundScore, 650, () => SFX.tick());
+  restart(el("round"), "bump");
+  S.handsLeft -= 1; pips(el("hands"), S.handsLeft, 3);
+  await wait(600); if (g !== gen) return;
+  if (S.roundScore >= curRound().target) return cashOut();
+  if (S.handsLeft === 0) return lost();
+  S.rerollsLeft = 2; S.marked = S.marked.map(() => false);
+  speed = 1; roll([0, 1, 2, 3, 4]);
+}
+
+// ================================================================ end of round
+function showOverlay(title, sub) {
+  $("#ovTitle").textContent = title; $("#ovSub").textContent = sub; $("#cashLines").innerHTML = "";
+  const b = $("#ovBtn"); b.style.visibility = "hidden"; b.className = "btn play"; $("#overlay").classList.add("show");
+}
+async function cashOut() {
+  const g = gen; S.phase = "over"; speed = 1; SFX.win();
+  const rd = curRound();
+  showOverlay("Round won", `${fmt(S.roundScore)} of ${fmt(rd.target)}`);
+  const gold = reserveDice().filter(d => d.material === "gold").length;
+  const rows = [[`${rd.name} beaten`, rd.pay], [`Unused hands (${S.handsLeft})`, S.handsLeft],
+    [`Gold dice in reserve (${gold})`, 3 * gold], ["Interest: $1 per $5 you hold", Math.min(5, Math.floor(R().money / 5))]].filter(l => l[1] > 0);
+  await wait(500);
+  let total = 0;
+  for (const [label, n] of rows) {
+    const row = document.createElement("div"); row.className = "cashLine";
+    row.innerHTML = `<span>${label}</span><span class="coins"></span>`; $("#cashLines").appendChild(row);
+    await wait(300); if (g !== gen) return;
+    const coins = row.querySelector(".coins");
+    for (let c = 0; c < n; c++) { coins.insertAdjacentHTML("beforeend", "<span>$</span>"); SFX.coin(); await wait(170); if (g !== gen) return; }
+    total += n; await wait(250);
+  }
+  const b = $("#ovBtn"); b.textContent = `Cash out $${total}`; b.className = "btn cash"; b.style.visibility = "visible"; restart(b, "slam");
+  b.onclick = async e => {
+    e.stopPropagation(); b.onclick = null; $("#overlay").classList.remove("show");
+    const m = el("money");
+    for (let c = 0; c < total; c++) { R().money += 1; m.textContent = "$" + R().money; restart(m, "bump"); SFX.coin(); await wait(120); if (g !== gen) return; }
+    await wait(500); if (g !== gen) return;
+    enterShop();
+  };
+}
+function lost() {
+  S.phase = "over"; SFX.lose();
+  showOverlay("Run over", `${fmt(S.roundScore)} of ${fmt(curRound().target)} · you reached ante ${R().ante}`);
+  const b = $("#ovBtn"); b.textContent = "New run"; b.style.visibility = "visible";
+  b.onclick = e => { e.stopPropagation(); startRun(); };
+}
+
+// ================================================================ shop
+function nextRoundOf(run) { let a = run.ante, r = run.round + 1; if (r > 2) { r = 0; a += 1; } return { ante: a, round: r }; }
+function rollOffers() {
+  const keys = Object.keys(PACK_WEIGHTS), total = keys.reduce((s, k) => s + PACK_WEIGHTS[k], 0);
+  const draw = () => { let x = Math.random() * total; for (const k of keys) { x -= PACK_WEIGHTS[k]; if (x < 0) return k; } return keys[0]; };
+  const offers = [];
+  for (let s = 0; s < 3; s++) {
+    let kind = draw();
+    if (s === 0 && R().diceBagShown !== R().ante) kind = "dice";
+    if (kind === "dice") R().diceBagShown = R().ante;
+    offers.push({ kind, sold: false });
+  }
+  return offers;
+}
+function enterShop() {
+  gen++; speed = 1; S.phase = "shop"; fx.innerHTML = ""; $("#overlay").classList.remove("show");
+  R().shop = { offers: rollOffers(), rerollCost: 2, sel: null, pick: null };
+  showScreen("shop"); renderShop();
+}
+function renderShop() {
+  const sh = R().shop, nx = nextRoundOf(R());
+  const [nName, nMult] = ROUNDS[nx.round];
+  el("shopAnte").textContent = `Ante ${R().ante} / 8`; el("shopMoney").textContent = "$" + R().money;
+  el("nextName").textContent = nName + (nx.ante !== R().ante ? ` · Ante ${nx.ante}` : "");
+  el("nextTarget").textContent = fmt(Math.floor(BASE_TARGETS[Math.min(nx.ante, 8) - 1] * nMult));
+  makeRelics(el("shopRelics"), false);
+  el("offers").innerHTML = sh.offers.map((o, k) => { const p = PACKS[o.kind];
+    return `<div class="offer${o.sold ? " sold" : ""}${sh.pick === k ? " sel" : ""}" data-offer="${k}">${bagSVG(p)}<div class="ptag">$${p.price}</div>
+      <div class="soldMark">SOLD</div><div class="oname">${p.name}</div><div class="odesc">${p.desc}</div>
+      <button class="buy" data-buy="${k}" ${R().money < p.price ? "disabled" : ""}>Buy $${p.price}</button></div>`; }).join("");
+  el("offers").querySelectorAll("[data-offer]").forEach(n => n.addEventListener("click", e => { e.stopPropagation(); const k = +n.dataset.offer;
+    if (sh.offers[k].sold) return; sh.pick = sh.pick === k ? null : k; SFX.mark(); renderShop(); }));
+  el("offers").querySelectorAll("[data-buy]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); buy(+b.dataset.buy); }));
+  const rr = $("#shop [data-act=shopReroll]"); rr.textContent = `Reroll shop $${sh.rerollCost}`; rr.disabled = R().money < sh.rerollCost;
+  renderRack();
+}
+function renderRack() {
+  const rack = el("rack"), sh = R().shop;
+  rack.innerHTML = R().dice.map((d, k) => tile(d, topFace(d), 52, sh.sel === k ? "sel" : "", true).replace('class="ft', `data-i="${k}" class="ft`)).join("");
+  [...rack.children].forEach(n => dragReorder(n, rack, (a, b) => { swapArr([R().dice], a, b); if (sh.sel === a) sh.sel = b; else if (sh.sel === b) sh.sel = a; },
+    i => { if (i !== null) { sh.sel = sh.sel === i ? null : i; SFX.mark(); } renderRack(); }, () => true));
+  el("rolledLbl").style.width = `${HAND_SIZE * 52 + (HAND_SIZE - 1) * 8}px`; el("rolledLbl").style.textAlign = "center";
+  const pop2 = el("facePop");
+  if (sh.sel != null && R().dice[sh.sel]) {
+    const d = R().dice[sh.sel];
+    el("fpTitle").textContent = `${d.size} · ${d.faces.length} faces` + (MATS[d.material].text ? ` · ${MATS[d.material].text}` : "");
+    el("fpFaces").innerHTML = faceChart(d, "md"); pop2.classList.add("show");
+  } else pop2.classList.remove("show");
+}
+async function buy(k) {
+  const o = R().shop.offers[k], p = PACKS[o.kind];
+  if (o.sold || R().money < p.price) return;
+  R().money -= p.price; o.sold = true; SFX.coin(); R().shop.sel = null; R().shop.pick = null; renderShop();
+  openPack(o.kind);
+}
+
+// ================================================================ packs
+function packOptions(kind) {
+  if (kind === "dice") {
+    const ts = []; const pool = TEMPLATES.slice();
+    while (ts.length < 3) { const total = pool.reduce((s, t) => s + t.w, 0); let x = Math.random() * total;
+      const t = pool.find(t => (x -= t.w) < 0) || pool[0]; ts.push(t); pool.splice(pool.indexOf(t), 1); }
+    return ts.map(t => ({ kind: "die", title: t.title, sub: t.sub, die: t.build() }));
+  }
+  if (kind === "workshop") return sample(Object.keys(TOOLS), 3).map(id => ({ kind: "tool", tool: id, value: 1 + rnd(8), color: pick(COLORS) }));
+  if (kind === "stamp") return sample(Object.keys(STAMPS), 3).map(id => ({ kind: "stamp", stamp: id }));
+  if (kind === "ledger") return sample([...Object.keys(NUMBER_HANDS).filter(h => h !== "high"), ...Object.keys(COLOR_HANDS)], 3).map(h => ({ kind: "level", hand: h }));
+  const owned = new Set(R().relics.map(r => r.id));
+  return sample(RELIC_POOL.filter(r => !owned.has(r.id)), 3).map(r => ({ kind: "relic", relic: r }));
+}
+function cardHTML(o, k) {
+  let art = "", name = "", text = "", extra = "";
+  if (o.kind === "die") { art = tile(o.die, topFace(o.die), 56, "", true); name = o.title; text = o.sub || MATS[o.die.material].text || "";
+    extra = faceChart(o.die); }
+  else if (o.kind === "tool") { const t = TOOLS[o.tool]; art = t.icon; name = t.name; text = t.text(o); }
+  else if (o.kind === "stamp") { const s = STAMPS[o.stamp]; art = tile({ size: "d6" }, face(6, "blue", o.stamp), 62); name = s.name + " stamp"; text = s.text; }
+  else if (o.kind === "level") { const isNum = !!NUMBER_HANDS[o.hand], tb = isNum ? NUMBER_HANDS : COLOR_HANDS, l = lvl(o.hand);
+    const now = tb[o.hand][1] + tb[o.hand][2] * (l - 1), nxt = now + tb[o.hand][2];
+    art = "📒"; name = tb[o.hand][0]; text = `Lv ${l} → Lv ${l + 1}`;
+    extra = `<div class="lvlBig" data-lvl="${k}"><span style="color:${isNum ? "var(--pts-ink)" : "var(--bon-ink)"}">${now}</span><span class="arrow">→</span><span style="color:${isNum ? "var(--pts-ink)" : "var(--bon-ink)"}">${nxt}</span></div><div class="ctext">${isNum ? "points" : "bonus"}</div>`; }
+  else if (o.kind === "relic") { art = o.relic.icon; name = o.relic.name; text = o.relic.text; }
+  return `<div class="pcard${o.kind === "die" ? " dieCard" : ""}" data-card="${k}" style="animation-delay:${k * 0.12}s"><div class="art">${art}</div>
+    <div class="cname">${name}</div><div class="ctext">${text}</div>${extra}<div class="take">TAKE</div></div>`;
+}
+async function openPack(kind) {
+  const g = gen, ov = $("#packOv"), p = PACKS[kind];
+  const opts = packOptions(kind);
+  ov.innerHTML = `<div class="bagStage">${bagSVG(p)}</div>`; ov.classList.add("show");
+  const bs = ov.querySelector(".bagStage"); restart(bs, "shaking"); SFX.rustle(); await wait(780); if (g !== gen) return;
+  bs.querySelector(".bagSvg").classList.add("open"); SFX.pop(); await wait(260); if (g !== gen) return;
+  showCards(kind, opts, bs);
+}
+// fromBag: the bag element to deal out of; the cards rise from its mouth to their places.
+function showCards(kind, opts, fromBag) {
+  const ov = $("#packOv"), p = PACKS[kind];
+  ov.innerHTML = `<div class="packTitle">${p.name}<small>${p.desc}</small></div>
+    <div class="cards">${opts.map(cardHTML).join("")}</div>
+    <div class="rowBtns"><button class="btn ghost small" data-act="skip">Skip</button></div>`;
+  if (fromBag) {
+    ov.appendChild(fromBag);
+    const sr = stage.getBoundingClientRect(), br = fromBag.getBoundingClientRect();
+    const mx = (br.left + br.width / 2 - sr.left) / scale, my = (br.top + br.height * .27 - sr.top) / scale;
+    ov.querySelectorAll(".pcard").forEach((c, k) => {
+      c.classList.add("fromBag"); const r = c.getBoundingClientRect();
+      const dx = mx - (r.left + r.width / 2 - sr.left) / scale, dy = my - (r.top + r.height / 2 - sr.top) / scale;
+      c.animate([{ transform: `translate(${dx}px, ${dy}px) scale(.12)`, opacity: 0 }, { transform: `translate(${dx * .3}px, ${dy * .3 - 40}px) scale(.7)`, opacity: 1, offset: .45 },
+        { transform: "none", opacity: 1 }], { duration: 620 * speed, delay: (120 + k * 150) * speed, easing: "cubic-bezier(.25,.9,.3,1)", fill: "backwards" });
+      setTimeout(() => SFX.draw(k), (120 + k * 150) * speed);
+    });
+    fromBag.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(150px) scale(.6)", opacity: 0 }],
+      { duration: 650 * speed, delay: 520 * speed, easing: "ease-in", fill: "forwards" });
+    setTimeout(() => fromBag.remove(), 1300 * speed);
+  } else opts.forEach((_, k) => setTimeout(() => SFX.deal(), k * 120));
+  ov.querySelector("[data-act=skip]").addEventListener("click", e => { e.stopPropagation(); closePack(); });
+  ov.querySelectorAll("[data-card]").forEach(c => c.addEventListener("click", e => { e.stopPropagation(); take(kind, opts, +c.dataset.card); }));
+}
+function closePack() { $("#packOv").classList.remove("show"); $("#packOv").innerHTML = ""; renderShop(); }
+async function take(kind, opts, k) {
+  const g = gen, o = opts[k], ov = $("#packOv");
+  if (o.kind === "tool" || o.kind === "stamp") return targetMode(kind, opts, o);
+  if (o.kind === "die" && R().dice.length >= MAX_DICE) return replaceMode(kind, opts, o, "die");
+  if (o.kind === "relic" && R().relics.length >= RELIC_SLOTS) return replaceMode(kind, opts, o, "relic");
+  ov.querySelectorAll(".pcard").forEach((c, j) => c.classList.add(j === k ? "taken" : "faded"));
+  if (o.kind === "level") {
+    const before = lvl(o.hand); R().levels[o.hand] = before + 1; SFX.levelup();
+    const big = ov.querySelector(`[data-lvl="${k}"]`); restart(big, "bump"); restart(big, "flash");
+    await wait(900); if (g !== gen) return; closePack(); return;
+  }
+  SFX.chime(); await wait(500); if (g !== gen) return; closePack();
+  if (o.kind === "die") { R().dice.push(o.die); renderRack(); const n = el("rack").lastElementChild; restart(n, "land"); SFX.land(); }
+  if (o.kind === "relic") { R().relics.push(o.relic); makeRelics(el("shopRelics"), false); const n = el("shopRelics").children[R().relics.length - 1]; restart(n, "arrive"); SFX.chime(); }
+}
+// The pack is full-size cards; "replace" asks which die or relic to give up.
+function replaceMode(kind, opts, o, what) {
+  const ov = $("#packOv"); let sel = null;
+  const list = what === "die" ? R().dice : R().relics;
+  const draw = () => {
+    ov.innerHTML = `<div class="packTitle">${what === "die" ? "Your dice are full" : "Your relic slots are full"}<small>Pick one to give up</small></div>
+      <div class="target"><div class="rack">${what === "die"
+        ? list.map((d, i) => tile(d, topFace(d), 52, sel === i ? "sel" : "", true).replace('class="ft', `data-r="${i}" class="ft`)).join("")
+        : list.map((r, i) => `<div class="relic" data-r="${i}" style="${sel === i ? "box-shadow:0 0 0 3px #ffd23f" : ""}"><span class="icon">${r.icon}</span><span class="name">${r.name}</span></div>`).join("")}</div>
+      <div style="min-height:72px;background:#fff;border-radius:12px;padding:8px 10px;color:#221a3a;display:${what === "die" && sel !== null ? "block" : "none"}">${what === "die" && sel !== null ? `<div class="fpTitle" style="font-size:12px;font-weight:900;margin-bottom:5px">${list[sel].size} · ${list[sel].faces.length} faces${MATS[list[sel].material].text ? " · " + MATS[list[sel].material].text : ""}</div>${faceChart(list[sel], "md")}` : ""}</div>
+      <div class="rowBtns"><button class="btn ghost small" data-act="back">Back</button><button class="btn play small" data-act="ok" ${sel === null ? "disabled" : ""}>Replace it</button></div></div>`;
+    ov.querySelectorAll("[data-r]").forEach(n => n.addEventListener("click", e => { e.stopPropagation(); sel = +n.dataset.r; SFX.mark(); draw(); }));
+    ov.querySelector("[data-act=back]").addEventListener("click", e => { e.stopPropagation(); showCards(kind, opts); });
+    ov.querySelector("[data-act=ok]").addEventListener("click", e => { e.stopPropagation();
+      if (what === "die") R().dice[sel] = o.die; else R().relics[sel] = o.relic; SFX.chime(); closePack(); });
+  };
+  draw();
+}
+// Tools and stamps: pick a die, then a face (Copy: a face to copy, then a face to copy onto; Hammer: just a die).
+function targetMode(kind, opts, o) {
+  const ov = $("#packOv"), t = o.kind === "tool" ? TOOLS[o.tool] : null;
+  const need = t ? t.target : "face";
+  const title = t ? `${t.icon} ${t.name}` : `${STAMPS[o.stamp].badge} ${STAMPS[o.stamp].name} stamp`;
+  const what = t ? t.text(o) : STAMPS[o.stamp].text;
+  const verb = t ? t.verb : "Stamp it";
+  const T = { die: null, face: null, src: null, msg: "" };
+  const prompt = () => need === "die" ? (T.die === null ? "Pick a die" : "")
+    : need === "two" ? (T.src === null ? "Pick the face to copy" : `Copying ${tile(R().dice[T.src.die], R().dice[T.src.die].faces[T.src.face], 24)} ${T.face === null ? "onto: pick a face" : "onto the yellow face"}`)
+    : (T.die === null ? "Pick a die" : T.face === null ? "Pick a face" : "");
+  const ready = () => need === "die" ? T.die !== null : need === "two" ? T.src !== null && T.face !== null : T.face !== null;
+  const draw = () => {
+    const d = T.die !== null ? R().dice[T.die] : null;
+    ov.innerHTML = `<div class="packTitle">${title}<small>${what}</small></div>
+      <div class="target">
+        <div class="rack">${R().dice.map((x, i) => tile(x, topFace(x), 52, T.die === i ? "sel" : "", true).replace('class="ft', `data-d="${i}" class="ft`)).join("")}</div>
+        <div class="faceRow" data-el="tFaces">${d ? d.faces.map((f, j) => tile(d, f, 48,
+          (T.face === j ? "pick " : "") + (T.src && T.src.die === T.die && T.src.face === j ? "src" : "")).replace('class="ft', `data-f="${j}" class="ft`)).join("") : ""}</div>
+        <div class="msg">${T.msg || prompt()}</div>
+        <div class="rowBtns"><button class="btn ghost small" data-act="back">Back</button><button class="btn play small" data-act="ok" ${ready() ? "" : "disabled"}>${verb}</button></div>
+      </div>`;
+    ov.querySelectorAll("[data-d]").forEach(n => n.addEventListener("click", e => { e.stopPropagation(); T.die = +n.dataset.d; T.msg = "";
+      if (need !== "two") T.face = null; else if (T.src) T.face = null; SFX.mark(); draw(); }));
+    ov.querySelectorAll("[data-f]").forEach(n => n.addEventListener("click", e => { e.stopPropagation(); const j = +n.dataset.f; T.msg = "";
+      if (need === "die") return;
+      if (need === "two" && T.src === null) T.src = { die: T.die, face: j };
+      else if (need === "two" && T.src.die === T.die && T.src.face === j) { T.msg = "Pick a different face"; }
+      else T.face = j;
+      SFX.mark(); draw(); }));
+    ov.querySelector("[data-act=back]").addEventListener("click", e => { e.stopPropagation(); showCards(kind, opts); });
+    ov.querySelector("[data-act=ok]").addEventListener("click", e => { e.stopPropagation(); apply(); });
+  };
+  const apply = async () => {
+    const g = gen, d = R().dice[T.die], faceEls = [...ov.querySelectorAll("[data-f]")];
+    ov.querySelectorAll("button").forEach(b => b.disabled = true);
+    const fail = m => { T.msg = m; SFX.nope(); draw(); };
+    if (t && (o.tool === "chisel" || o.tool === "hammer") && d.faces.length <= 2) return fail("A die keeps at least 2 faces");
+    if (o.tool === "chisel") { faceEls[T.face].classList.add("crack"); SFX.crack(); await wait(520); if (g !== gen) return; d.faces.splice(T.face, 1); }
+    else if (o.tool === "hammer") {
+      const remove = Math.max(1, Math.min(d.faces.length - 2, Math.round(d.faces.length * (0.3 + Math.random() * 0.3))));
+      const gone = sample(d.faces.map((_, j) => j), remove).sort((a, b) => b - a);
+      restart(ov.querySelector(`[data-d="${T.die}"]`), "shake");
+      for (const j of gone.slice().reverse()) { faceEls[j].classList.add("crack"); SFX.crack(); await wait(260); if (g !== gen) return; }
+      await wait(300); gone.forEach(j => d.faces.splice(j, 1));
+    }
+    else if (o.tool === "forge") { SFX.clink(); restart(faceEls[T.face], "glowFace"); await wait(250); d.faces[T.face].n = o.value; }
+    else if (o.tool === "paint") { SFX.swish(); restart(faceEls[T.face], "glowFace"); await wait(250); d.faces[T.face].color = o.color; }
+    else if (o.tool === "copy") { SFX.swish(); restart(faceEls[T.face], "glowFace"); await wait(250); d.faces[T.face] = { ...R().dice[T.src.die].faces[T.src.face] }; }
+    else { SFX.thunk(); restart(faceEls[T.face], "glowFace"); await wait(200); d.faces[T.face].stamp = o.stamp; }
+    T.msg = ""; draw(); ov.querySelectorAll("button").forEach(b => b.disabled = true);
+    if (o.tool === "forge" || o.tool === "paint" || o.tool === "copy" || !t) { const n = ov.querySelectorAll("[data-f]")[T.face]; if (n) restart(n, "slam"); }
+    await wait(900); if (g !== gen) return; closePack();
+  };
+  draw();
+}
+
+// ================================================================ controls
+stage.addEventListener("click", () => { if (S.phase === "scoring" || S.phase === "over") speed = 0.35;
+  stage.querySelectorAll(".relic.show").forEach(x => x.classList.remove("show")); });
+$("#hand [data-act=reroll]").addEventListener("click", e => { e.stopPropagation();
+  if (S.phase !== "choosing" || S.rerollsLeft === 0) return; const idx = rerollSet(); if (!idx.length) return;
+  S.rerollsLeft -= 1; roll(idx); });
+$("#hand [data-act=play]").addEventListener("click", e => { e.stopPropagation(); if (S.phase === "choosing") play(); });
+$("#hand [data-act=sheet]").addEventListener("click", e => { e.stopPropagation(); S.sheetOpen = !S.sheetOpen; updateHand(); });
+stage.querySelectorAll("[data-act=settings]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); paintSettings(); $("#settings").classList.add("show"); }));
+$("#setDone").addEventListener("click", e => { e.stopPropagation(); $("#settings").classList.remove("show"); });
+function paintSettings() {
+  stage.querySelectorAll(".seg").forEach(seg => seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", S[seg.dataset.set] === b.dataset.v)));
+}
+stage.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", e => { e.stopPropagation();
+  const key = b.parentElement.dataset.set; if (S[key] === b.dataset.v) return;
+  S[key] = b.dataset.v; if (key === "tap") S.marked = S.marked.map(() => false); paintSettings();
+  if ($("#hand").classList.contains("on")) updateHand(); else renderShop(); }));
+$("#shop [data-act=shopReroll]").addEventListener("click", e => { e.stopPropagation(); const sh = R().shop;
+  if (R().money < sh.rerollCost) return; R().money -= sh.rerollCost; sh.rerollCost += 1; sh.offers = rollOffers(); sh.pick = null; SFX.coin(); SFX.deal(); renderShop(); });
+$("#shop [data-act=nextRound]").addEventListener("click", e => { e.stopPropagation(); const nx = nextRoundOf(R());
+  if (nx.ante > 8) { showOverlay("Run won", "You beat all 8 antes"); const b = $("#ovBtn"); b.textContent = "New run"; b.style.visibility = "visible"; SFX.win();
+    b.onclick = ev => { ev.stopPropagation(); startRun(); }; return; }
+  R().ante = nx.ante; R().round = nx.round; startRound(); });
+$("#shop [data-act=levels]").addEventListener("click", e => { e.stopPropagation();
+  const row = (tb, id, cls) => `<div><span>${tb[id][0]} <span class="lv">Lv ${lvl(id)}</span></span><span class="${cls}">${tb[id][1] + tb[id][2] * (lvl(id) - 1)}</span></div>`;
+  const nk = Object.keys(NUMBER_HANDS), ck = Object.keys(COLOR_HANDS);
+  let html = `<div class="h">NUMBER HANDS · POINTS</div><div class="h">COLOR HANDS · BONUS</div>`;
+  for (let k = 0; k < nk.length; k++) html += row(NUMBER_HANDS, nk[k], "p") + (ck[k] ? row(COLOR_HANDS, ck[k], "b") : "<div></div>");
+  $("#lvlTable").innerHTML = html; $("#levelsOv").classList.add("show"); });
+$("#levelsDone").addEventListener("click", e => { e.stopPropagation(); $("#levelsOv").classList.remove("show"); });
+
+function startRound() {
+  gen++; fx.innerHTML = ""; $("#overlay").classList.remove("show"); $("#packOv").classList.remove("show");
+  showScreen("hand"); makeRelics(el("relics"), true);
+  el("lines").innerHTML = ""; el("sheetTitle").textContent = "SCORE SHEET"; el("score").textContent = "";
+  el("dice").innerHTML = ""; resetRound(); roll([0, 1, 2, 3, 4]);
+}
+function startRun() { newRun(); startRound(); }
+
+// ================================================================ prototype bar
+function setSnd() { $("#sndBtn").textContent = AC.on ? "Sound on" : "Sound off"; }
+$("#sndBtn").onclick = () => { AC.on = !AC.on; setSnd(); };
+$("#shopBtn").onclick = () => { R().money += 20; enterShop(); };
+$("#newBtn").onclick = () => startRun();
+$("#notesBtn").onclick = () => $("#notes").classList.toggle("show");
+$("#notes").innerHTML = `<h3>Hand screen</h3><ol>
+    <li><b>Round and ante</b> — Small, Big, then Boss round; 8 antes win the run.</li>
+    <li><b>Score to beat and round score</b> — your 3 hands add up toward the target.</li>
+    <li><b>Hands and rerolls left</b> — each unused reroll pays $1.</li>
+    <li><b>Reserve</b> — your dice beyond the 5 you roll. Steel and Gold dice work from here.</li>
+    <li><b>Relics</b> — always-on bonuses. Tap to read. They wiggle when they add.</li>
+    <li><b>Your 5 dice</b> — tap to keep (or mark to reroll, in settings), drag to reorder. Dice score left to right.</li>
+    <li><b>Points × Bonus</b> — number hand and dice make points; color hand and relics make bonus.</li>
+    <li><b>Score sheet</b> — hand, then each die with what it triggered, then whole-hand effects. Stays up after the hand.</li>
+  </ol><h3>Shop</h3><ol>
+    <li><b>Bags</b> — 3 for sale; tap one, then Buy. Every ante's first shop has a Dice Bag. Reroll the shop for $2, rising $1 each time.</li>
+    <li><b>Next round</b> — what's coming and its target.</li>
+    <li><b>Your dice</b> — the first 5 roll; the rest are reserve. Drag to rearrange, tap to see a die's faces. The bar under each die is its color mix.</li>
+    <li><b>Hand levels</b> — what each hand is worth now; Ledgers raise them.</li>
+  </ol><h3>Opening a bag</h3><ol>
+    <li><b>Pick 1 of 3</b>, or skip.</li>
+    <li><b>Tools and stamps</b> — then pick a die and a face. Copy: the face to copy, then the face to copy onto. Hammer: just a die.</li>
+    <li><b>Full</b> — if your dice (8) or relic slots (5) are full, pick one to give up.</li>
+  </ol><p>"Shop now" in this bar jumps to the shop with +$20 to try packs. Not in yet: boss rules, picking which 5 dice to roll before a round.</p>`;
+
+function fit() { scale = Math.min(innerWidth / 844, (innerHeight - 46) / 390); stage.style.transform = `scale(${scale})`; }
+addEventListener("resize", fit); fit(); setSnd();
+startRun();
+</script>
+</body>
+</html>
