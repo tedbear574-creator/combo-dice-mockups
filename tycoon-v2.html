@@ -52,7 +52,7 @@
     animation: popIn .25s ease-out, fadeUp 2.2s ease-in forwards; white-space: nowrap; }
   .pop.announce b { color: #ffe27a; }
   @keyframes fadeUp { 0%, 70% { opacity: 1; } 100% { opacity: 0; margin-top: -40px; } }
-  .stats { position: absolute; top: 72px; left: 10px; width: 150px; background: rgba(22,16,44,.8); border-radius: 12px; padding: 6px 10px; font-size: 12px; }
+  .stats { position: absolute; z-index: 3; top: 72px; left: 10px; width: 150px; background: rgba(22,16,44,.8); border-radius: 12px; padding: 6px 10px; font-size: 12px; }
   .stats div { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; font-weight: 800; }
   .stats div span { opacity: .7; font-weight: 700; } .stats div b { color: #fff; transition: color .3s; }
   .stats div.flash b { color: #ffe27a; animation: bump .3s ease-out 2; }
@@ -259,7 +259,7 @@
   <!-- collection book / shop / storage shelf overlays -->
   <div class="overlay" id="ovBook"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">COLLECTION <span id="bookPct"></span></div><div class="book" id="bookGrid"></div><div class="ovFoot" id="bookFoot"></div></div></div>
   <div class="overlay" id="ovShop"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">SHOP</div><div class="shop" id="shopList"></div></div></div>
-  <div class="overlay" id="ovBag"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">STORAGE <span id="bagCap"></span></div><div class="bag" id="bagGrid"></div><div class="ovFoot" id="bagFoot">Tap a die to place it on the board · tap two of a kind to merge</div></div></div>
+  <div class="overlay" id="ovBag"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">STORAGE <span id="bagCap"></span></div><div class="bag" id="bagGrid"></div><div class="ovFoot" id="bagFoot"></div></div></div>
 </div>
 <script type="module">
 import * as THREE from "three";
@@ -1425,7 +1425,7 @@ function playCrate(pulls) {
     C("crDie").textContent = "d" + T.sides; C("crDie").className = "crDie" + (best.shiny ? " shiny" : "");
     C("crName").textContent = kindName(best.tier, best.color) + (best.shiny ? " ✦" : "");
     C("crTier").textContent = T.name + (pulls.length > 1 ? `  +${pulls.length - 1} more` : ""); C("crTier").style.color = tCol;
-    card.className = "crCard show"; hint.textContent = "tap to continue";
+    card.className = "crCard show"; hint.textContent = "";
     if (best.tier >= 4 || best.shiny) SFX.sparkle();
   }, 1320);
   setTimeout(finish, 3200);
@@ -1471,14 +1471,14 @@ function renderBook() {
 // ================================================================ pretend Robux shop
 let luckStack = 0;
 const SHOP = [
-  { id: "luck15", icon: "🍀", name: "Luck Boost", sub: "×2 luck · 15 min · stacks", price: 49, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Luck ×2", color: "#86e29a", dur: 15 * 60000, luck: 2 }); banner(`<b>Luck Boost</b> active · ×${fmtMult(luck())} luck`); } },
-  { id: "serverLuck", icon: "🌟", name: "Server Luck", sub: "×2 luck for everyone · 15 min", price: 99, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Server Luck", color: "#ffd23f", dur: 15 * 60000, luck: 2 }); banner(`<b>You</b> bought <span class="sp">Server Luck</span> — ×2 luck for the whole server!`); } },
-  { id: "x2", icon: "✖2", name: "x2 Points", sub: "Pass · permanent", price: 199, pass: true, act() { applyStats(); banner(`<b>x2 Points</b> pass unlocked`); } },
-  { id: "auto", icon: "⚙", name: "Auto-Open Crates", sub: "Pass · opens when you can afford it", price: 149, pass: true },
-  { id: "open3", icon: "3", name: "Open 3 at Once", sub: "Pass · triple every pull", price: 179, pass: true },
-  { id: "bigbag", icon: "🎒", name: "Bigger Storage", sub: "Pass · 12 → 24 shelf slots", price: 99, pass: true },
-  { id: "vip", icon: "👑", name: "VIP Plot", sub: "Pass · golden plot look", price: 129, pass: true, act() { matMesh.material.color.setHex(0xffe27a); pads.forEach(p => p.mesh.material.emissive.setHex(0xffd23f)); } },
-  { id: "starter", icon: "🎁", name: "Starter Pack", sub: "One-time · 3,000 points + a Rare die", price: 29, once: true, act() { earn(3000); obtainDie({ tier: 2, color: CNAMES[rnd(5)], level: 0, shiny: false }); banner(`<b>Starter Pack</b> claimed`); renderStorage(); } },
+  { id: "luck15", icon: "🍀", name: "Luck Boost", sub: "×2 luck · 15 min", price: 49, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Luck ×2", color: "#86e29a", dur: 15 * 60000, luck: 2 }); banner(`<b>Luck Boost</b> active · ×${fmtMult(luck())} luck`); } },
+  { id: "serverLuck", icon: "🌟", name: "Server Luck", sub: "×2 luck · whole server · 15 min", price: 99, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Server Luck", color: "#ffd23f", dur: 15 * 60000, luck: 2 }); banner(`<b>You</b> bought <span class="sp">Server Luck</span> — ×2 luck for the whole server!`); } },
+  { id: "x2", icon: "✖2", name: "x2 Points", sub: "Pass", price: 199, pass: true, act() { applyStats(); banner(`<b>x2 Points</b> pass unlocked`); } },
+  { id: "auto", icon: "⚙", name: "Auto-Open Crates", sub: "Pass", price: 149, pass: true },
+  { id: "open3", icon: "3", name: "Open 3 at Once", sub: "Pass · ×3 dice per crate", price: 179, pass: true },
+  { id: "bigbag", icon: "🎒", name: "Bigger Storage", sub: "Pass · 12 → 24", price: 99, pass: true },
+  { id: "vip", icon: "👑", name: "VIP Plot", sub: "Pass", price: 129, pass: true, act() { matMesh.material.color.setHex(0xffe27a); pads.forEach(p => p.mesh.material.emissive.setHex(0xffd23f)); } },
+  { id: "starter", icon: "🎁", name: "Starter Pack", sub: "3,000 points + Rare die", price: 29, once: true, act() { earn(3000); obtainDie({ tier: 2, color: CNAMES[rnd(5)], level: 0, shiny: false }); banner(`<b>Starter Pack</b> claimed`); renderStorage(); } },
 ];
 function openShop() { renderShop(); C("ovShop").classList.add("open"); SFX.pick(); }
 function renderShop() {
