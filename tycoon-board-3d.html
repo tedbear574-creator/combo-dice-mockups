@@ -66,6 +66,31 @@
   @keyframes writeIn { from { opacity: 0; transform: translateX(-8px); } }
   @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(.3); } 70% { transform: translate(-50%, -50%) scale(1.25); } }
   @keyframes rise { to { transform: translate(-50%, -160%); opacity: 0; } }
+  /* ---- prestige ---- */
+  .total .plv { position: absolute; top: -9px; right: -9px; font-size: 12px; font-weight: 900; color: #d9bbff;
+    background: rgba(40,24,70,.95); border: 1px solid rgba(155,93,229,.75); border-radius: 9px; padding: 1px 7px; }
+  .total .plv.ready { color: #2a1800; background: #ffd23f; border-color: #ffd23f; animation: bump .7s ease-out infinite; }
+  .tag.sign.plv0 { display: none; }
+  .tag.sign.ready { background: rgba(155,93,229,.92); color: #ffd23f; }
+  .prestige { position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%) translateY(12px); width: 236px;
+    background: rgba(22,16,44,.93); border: 1px solid rgba(155,93,229,.55); border-radius: 16px; padding: 9px 12px 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; }
+  .prestige.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .prestige .pTitle { font-size: 11px; font-weight: 900; letter-spacing: .15em; opacity: .55; text-align: center; }
+  .prestige .pLvls { text-align: center; font-weight: 900; font-size: 15px; margin: 1px 0 7px; }
+  .prestige .pLvls em { opacity: .55; font-style: normal; margin: 0 8px; }
+  .prestige .pLvls b { color: #ffd23f; font-size: 21px; }
+  .prestige .pGains { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 9px; font-size: 12px; font-weight: 800; margin-bottom: 9px; }
+  .prestige .pGains div { display: flex; justify-content: space-between; gap: 6px; }
+  .prestige .pGains span { opacity: .6; } .prestige .pGains b { color: #ffd23f; }
+  .prestige .pBtn { width: 100%; border: 0; border-radius: 11px; height: 40px; font: 900 15px "Trebuchet MS", sans-serif; color: #fff;
+    background: #6b4bb0; box-shadow: inset 0 -4px 0 rgba(0,0,0,.25); }
+  .prestige.ready .pBtn { background: #ffd23f; color: #2a1800; animation: bump .75s ease-out infinite; }
+  .prestige .pBtn:disabled { filter: grayscale(.5) brightness(.82); }
+  .prestige .pBar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.15); margin-top: 8px; overflow: hidden; }
+  .prestige .pBar i { display: block; height: 100%; width: 0; background: #9b5de5; border-radius: 4px; transition: width .2s; }
+  .prestige.ready .pBar i { background: #ffd23f; }
+  .prestige .pNeed { text-align: center; font-size: 11px; font-weight: 800; opacity: .7; margin-top: 5px; }
 </style>
 <script type="importmap">{ "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -76,8 +101,16 @@
   <div class="stats" id="stats"><div data-s="dice"><span>Dice</span><b></b></div><div data-s="combo"><span>Combo</span><b></b></div>
     <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="best"><span>Best roll</span><b></b></div></div>
   <div class="sheet"><h4>LAST ROLL</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
-  <div class="total" id="total"><b id="pts">0</b><small id="rate">0 / sec</small></div>
+  <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
   <div class="dev"><button data-dev="cash">+1,000</button><button data-dev="fast">Max speed</button><button data-dev="fill">Fill board</button><button data-dev="sound" class="on">Sound</button></div>
+  <div class="prestige" id="pPanel">
+    <div class="pTitle">PRESTIGE</div>
+    <div class="pLvls"><span id="pFrom">0</span><em>→</em><b id="pTo">1</b></div>
+    <div class="pGains" id="pGains"></div>
+    <button class="pBtn" id="pBtn">PRESTIGE</button>
+    <div class="pBar"><i id="pBar"></i></div>
+    <div class="pNeed" id="pNeed"></div>
+  </div>
   <div id="stick"><i></i></div>
   <div class="boardBar">
     <button class="bDie" data-buy="die"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button>
@@ -178,7 +211,8 @@ plot(0); plot(70);
 // ================================================================ dice
 const COLORS = { red: "#ef4b52", blue: "#3f7cf0", green: "#2fb36b", yellow: "#f5bf1d", purple: "#9b5de5" };
 const CNAMES = Object.keys(COLORS);
-const CELL = 4, N = 5, DIE = 2.9, TOP = 1.12;
+const CELL = 4, DIE = 2.9, TOP = 1.12;
+let N = 5; // board side; the prestige section grows it (5x5 → 6x6 → 7x7). Refer to board size only through N.
 const PIPS = { 1: [[.5, .5]], 2: [[.28, .28], [.72, .72]], 3: [[.27, .27], [.5, .5], [.73, .73]], 4: [[.28, .28], [.72, .28], [.28, .72], [.72, .72]],
   5: [[.27, .27], [.73, .27], [.5, .5], [.27, .73], [.73, .73]], 6: [[.28, .24], [.72, .24], [.28, .5], [.72, .5], [.28, .76], [.72, .76]] };
 function faceTex(color, n) {
@@ -218,34 +252,55 @@ const NB = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 class Board {
   constructor(x, mine) {
     this.mine = mine; this.group = new THREE.Group(); this.group.position.x = x; scene.add(this.group);
-    const W = N * CELL + 2;
+    this.geo = []; // base/rim/timer/tiles — torn down and rebuilt when the board grows (prestige)
+    this.links = new THREE.Group(); this.group.add(this.links);
+    this.buildGeometry();
+    this.cells = Array(N * N).fill(null);
+    this.busy = false; this.next = now + 1200; this.rollMs = 2000; this.combo = 1; this.pointsMult = 1;
+  }
+  // Build base, rim, roll-timer strip and tiles for the current N. Called at construction and after a board grows.
+  buildGeometry() {
+    const W = N * CELL + 2, push = m => { this.group.add(m); this.geo.push(m); };
     const base = new THREE.Mesh(new THREE.BoxGeometry(W, 1, W), std(0x7a4a26, { roughness: .7 })); base.position.y = .5;
-    base.castShadow = base.receiveShadow = true; this.group.add(base);
-    this.rim = new THREE.Mesh(new THREE.BoxGeometry(W + .8, .5, W + .8), std(0x5c361a, { metalness: 0, roughness: .6 })); this.rim.position.y = .25; this.group.add(this.rim);
-    if (mine) {
+    base.castShadow = base.receiveShadow = true; push(base);
+    this.rim = new THREE.Mesh(new THREE.BoxGeometry(W + .8, .5, W + .8), std(0x5c361a, { metalness: 0, roughness: .6 })); this.rim.position.y = .25; push(this.rim);
+    if (this.mine) {
       // Roll timer: a strip along the front edge that fills until the next roll.
       const L = W - 1, back = new THREE.Mesh(new THREE.BoxGeometry(L, .14, .55), std(0x1a1222));
-      back.position.set(0, 1.04, W / 2 - .45); this.group.add(back);
+      back.position.set(0, 1.04, W / 2 - .45); push(back);
       this.timer = new THREE.Mesh(new THREE.BoxGeometry(L, .16, .45), new THREE.MeshBasicMaterial({ color: 0x5aa0ff }));
-      this.timer.position.set(0, 1.06, W / 2 - .45); this.timerL = L; this.group.add(this.timer);
+      this.timer.position.set(0, 1.06, W / 2 - .45); this.timerL = L; push(this.timer);
     }
     this.tiles = [];
     for (let i = 0; i < N * N; i++) {
       const m = new THREE.MeshStandardMaterial({ color: (i + Math.floor(i / N)) % 2 ? 0x2a3656 : 0x25304d, roughness: .95, emissive: 0x000000 });
       const t = new THREE.Mesh(new THREE.BoxGeometry(CELL - .3, .12, CELL - .3), m); const p = this.cellPos(i);
-      t.position.set(p.x, TOP - .06, p.z); t.receiveShadow = true; this.group.add(t); this.tiles.push(t);
+      t.position.set(p.x, TOP - .06, p.z); t.receiveShadow = true; this.group.add(t); this.tiles.push(t); this.geo.push(t);
     }
-    this.cells = Array(N * N).fill(null);
-    this.links = new THREE.Group(); this.group.add(this.links);
-    this.busy = false; this.next = now + 1200; this.rollMs = 2000; this.combo = 1; this.pointsMult = 1;
   }
-  cellPos(i) { return new THREE.Vector3((i % N - 2) * CELL, TOP + DIE / 2, (Math.floor(i / N) - 2) * CELL); }
+  // Remove every die (optionally with a lift-off-and-vanish effect for the prestige reset).
+  clearDice(effect) {
+    this.cells.forEach((d, k) => {
+      if (!d) return; const mesh = d.mesh;
+      if (effect) tween(480, e => { mesh.position.y = (TOP + DIE / 2) + e * e * 42; mesh.scale.setScalar(Math.max(.001, 1 - e)); mesh.rotation.x += .25; }, k * 12)
+        .then(() => { this.group.remove(mesh); });
+      else this.group.remove(mesh);
+    });
+    this.cells = Array(N * N).fill(null);
+  }
+  // Grow (or shrink) the board to the current global N: tear down geometry, rebuild it, reset the cell grid.
+  resize() {
+    this.clearLinks();
+    for (const m of this.geo) { this.group.remove(m); m.geometry.dispose(); m.material.dispose(); }
+    this.geo = []; this.buildGeometry(); this.cells = Array(N * N).fill(null); this.next = now + this.rollMs;
+  }
+  cellPos(i) { const o = (N - 1) / 2; return new THREE.Vector3((i % N - o) * CELL, TOP + DIE / 2, (Math.floor(i / N) - o) * CELL); }
   world(i, dy = 0) { return this.cellPos(i).add(this.group.position).add(new THREE.Vector3(0, dy, 0)); }
   // Empty cells fill from the middle out, so a growing collection grows the board's center first.
   emptyCell() {
     const order = [...Array(N * N).keys()].sort((a, b) => dist(a) - dist(b));
     return order.find(i => !this.cells[i]);
-    function dist(i) { const r = Math.floor(i / N) - 2, c = i % N - 2; return r * r + c * c + (r + c) * .01; }
+    function dist(i) { const o = (N - 1) / 2, r = Math.floor(i / N) - o, c = i % N - o; return r * r + c * c + (r + c) * .01; }
   }
   addDie(i, color, drop) {
     const mesh = new THREE.Mesh(dieGeo, MATS[color]); mesh.castShadow = true; mesh.receiveShadow = true;
@@ -430,24 +485,35 @@ const theirs = new Board(70, false); theirs.rollMs = 1400;
 for (let k = 0; k < 21; k++) theirs.addDie(theirs.emptyCell(), CNAMES[[0, 0, 1, 2, 2, 3][rnd(6)]], false);
 
 // ================================================================ economy
-const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0 };
+const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0, prestige: 0, runPoints: 0 };
 // Every rule that sets the roll interval, combo bonus or points multiplier adds its factor here; applyStats() pushes
 // the result onto the board. pointsMult multiplies each scored group's points.
+// Prestige hooks in here (see the prestige section): +25% points per level, a higher combo cap, a faster roll floor.
+// Prestige tuning + pure helpers (the rest of the prestige feature is in its own section below).
+// Numbers tuned with scripts/prestige-sim.js: first die <15s, full 5x5 ~10-11min, caps ~15-16min, first prestige ~17min.
+const PRESTIGE = { base: 900000, rate: 2.8, pointsPer: .25, comboCapPer: 1, rollFloorPer: 60, startDiePer: 1, maxN: 7 };
+const rollFloor = p => Math.max(220, 500 - PRESTIGE.rollFloorPer * p);        // faster floor each level
+const comboCap = p => 5 + PRESTIGE.comboCapPer * p;                           // higher combo cap each level
+const boardSizeFor = p => Math.min(PRESTIGE.maxN, 5 + (p >= 2 ? 2 : p >= 1 ? 1 : 0)); // 5x5 → 6x6 (p1) → 7x7 (p2)
+const startDice = p => 4 + PRESTIGE.startDiePer * p;                          // one more starting die each level
+const levelThreshold = lv => PRESTIGE.base * Math.pow(PRESTIGE.rate, lv);     // run points for the (lv+1)-th level
+function runPointsFor(from, target) { let t = 0; for (let lv = from; lv < target; lv++) t += levelThreshold(lv); return t; }
+function levelsReachable(runPoints, from) { let lv = from, t = 0; for (;;) { const need = levelThreshold(lv); if (runPoints < t + need) break; t += need; lv++; } return lv - from; }
 function stats() {
   return {
-    rollMs: Math.max(500, Math.round(2000 * Math.pow(.9, S.speedLv))),
-    combo: Math.min(5, 1 + .25 * S.comboLv),
-    pointsMult: 1,
+    rollMs: Math.max(rollFloor(S.prestige), Math.round(2000 * Math.pow(.9, S.speedLv))),
+    combo: Math.min(comboCap(S.prestige), 1 + .25 * S.comboLv),
+    pointsMult: Math.pow(1 + PRESTIGE.pointsPer, S.prestige),
   };
 }
 function applyStats() { const s = stats(); mine.rollMs = s.rollMs; mine.combo = s.combo; mine.pointsMult = s.pointsMult; return s; }
 const COST = {
-  die: () => Math.round(25 * Math.pow(1.35, S.bought)),
-  combo: () => Math.round(150 * Math.pow(1.5, S.comboLv)),
-  speed: () => Math.round(100 * Math.pow(1.5, S.speedLv)),
+  die: () => Math.round(160 * Math.pow(1.29, S.bought)),
+  combo: () => Math.round(560 * Math.pow(1.43, S.comboLv)),
+  speed: () => Math.round(480 * Math.pow(1.5, S.speedLv)),
 };
 const NAMES = { die: "Buy die", combo: "Better combos", speed: "Faster rolls" };
-const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || stats().rollMs > 500) && (k !== "combo" || stats().combo < 5);
+const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || stats().rollMs > rollFloor(S.prestige)) && (k !== "combo" || stats().combo < comboCap(S.prestige));
 function buy(k) {
   if (!canBuy(k) || S.points < COST[k]()) { SFX.no(); return false; }
   S.points -= COST[k](); S.shown = Math.min(S.shown, S.points); SFX.buy();
@@ -463,7 +529,7 @@ function buy(k) {
   return true;
 }
 const secs = ms => (ms / 1000).toFixed(ms % 1000 ? (ms % 100 ? 2 : 1) : 1) + "s";
-function earn(v) { S.points += v; S.earned.push([now, v]); }
+function earn(v) { S.points += v; S.runPoints += v; S.earned.push([now, v]); } // runPoints = points scored this run (feeds prestige)
 const fmt = n => n < 1e4 ? Math.floor(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : n < 1e9 ? (n / 1e6).toFixed(2) + "M" : (n / 1e9).toFixed(2) + "B";
 
 // ================================================================ HUD helpers
@@ -502,6 +568,94 @@ const MAT = { x: 0, z: 14.6, w: 9, d: 3.6 };
 const matMesh = new THREE.Mesh(new THREE.BoxGeometry(MAT.w, .3, MAT.d), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb000, emissiveIntensity: .35 }));
 matMesh.position.set(MAT.x, .55, MAT.z); scene.add(matMesh);
 tag(new THREE.Vector3(70, 13, 0), "Mikey's plot", "sign");
+
+// ================================================================ prestige
+// A shrine on the plot. Walk up to it to open the panel; prestige resets the run for permanent power
+// (+25% points/level, higher combo cap, faster roll floor, one more starting die, and a bigger board).
+const SHRINE = { x: -18.5, z: 17 };
+const shrine = new THREE.Group(); shrine.position.set(SHRINE.x, 0, SHRINE.z); scene.add(shrine);
+const shrineBase = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.8, .5, 6), std(0x33264d)); shrineBase.position.y = .5; shrineBase.receiveShadow = true; shrine.add(shrineBase);
+const shrineCol = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 2.1, 6), std(0x5a3f8f)); shrineCol.position.y = 1.65; shrineCol.castShadow = true; shrine.add(shrineCol);
+const ringMat = new THREE.MeshStandardMaterial({ color: 0x9b5de5, emissive: 0x9b5de5, emissiveIntensity: .5, roughness: .3 });
+const shrineRing = new THREE.Mesh(new THREE.TorusGeometry(1.55, .13, 10, 24), ringMat); shrineRing.position.y = 2.8; shrineRing.rotation.x = Math.PI / 2; shrine.add(shrineRing);
+const orbMat = new THREE.MeshStandardMaterial({ color: 0xcaa6ff, emissive: 0x9b5de5, emissiveIntensity: .6, roughness: .2, metalness: .1 });
+const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.05, 0), orbMat); orb.position.y = 3.8; orb.castShadow = true; shrine.add(orb);
+const shrineTag = tag(new THREE.Vector3(SHRINE.x, 6.7, SHRINE.z), "", "sign");
+
+const P = id => document.getElementById(id);
+const pPanel = P("pPanel"), pFrom = P("pFrom"), pTo = P("pTo"), pGains = P("pGains"), pBtn = P("pBtn"), pBar = P("pBar"), pNeed = P("pNeed"), totalPLv = P("totalPLv");
+let pPanelShown = false, prestiging = false;
+
+function prestigeStatus() {
+  const avail = levelsReachable(S.runPoints, S.prestige);
+  return { avail, ready: avail >= 1, to: S.prestige + Math.max(1, avail), need: runPointsFor(S.prestige, S.prestige + 1) };
+}
+// The gains panel shows numbers only: this level → the level you'd reach.
+function updatePrestigePanel() {
+  const st = prestigeStatus(), to = st.to, p = S.prestige;
+  pFrom.textContent = p; pTo.textContent = to;
+  const rows = [["Points", "×" + fmtMult(Math.pow(1 + PRESTIGE.pointsPer, to))], ["Combo", "+" + fmtMult(comboCap(to)) + "×"],
+    ["Rolls", "≥" + secs(rollFloor(to))], ["Start", startDice(to) + " dice"]];
+  if (boardSizeFor(to) !== boardSizeFor(p)) rows.push(["Board", `${boardSizeFor(to)}×${boardSizeFor(to)}`]);
+  pGains.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
+  pBtn.disabled = !st.ready; pPanel.classList.toggle("ready", st.ready);
+  pBar.style.width = Math.min(100, S.runPoints / st.need * 100) + "%";
+  pNeed.textContent = st.ready ? `+${st.avail} level${st.avail > 1 ? "s" : ""} ready` : `${fmt(S.runPoints)} / ${fmt(st.need)}`;
+}
+// Runs every frame: orb life, the "ready" advertisement, the plot/total badges and the proximity panel.
+function prestigeTick(dt) {
+  const st = prestigeStatus();
+  orb.rotation.y += dt * .8; orb.position.y = 3.8 + Math.sin(now / 600) * .16;
+  shrineRing.rotation.z += dt * .4;
+  const glow = st.ready ? .6 + .55 * (.5 + .5 * Math.sin(now / 170)) : .35;
+  orbMat.emissiveIntensity = ringMat.emissiveIntensity = glow;
+  const hex = st.ready ? 0xffd23f : 0x9b5de5; orbMat.emissive.setHex(hex); ringMat.emissive.setHex(hex);
+  shrineTag.el.className = "tag sign" + (st.ready ? " ready" : S.prestige ? "" : " plv0");
+  shrineTag.el.innerHTML = st.ready ? "PRESTIGE<small>ready ✦" + st.to + "</small>" : "PRESTIGE<small>✦" + S.prestige + "</small>";
+  totalPLv.style.display = (S.prestige > 0 || st.ready) ? "" : "none";
+  totalPLv.textContent = "✦" + S.prestige; totalPLv.classList.toggle("ready", st.ready && S.prestige === 0);
+  const near = mode === "walk" && Math.hypot(player.position.x - SHRINE.x, player.position.z - SHRINE.z) < 5.5;
+  shrineTag.hidden = near; // reading the panel instead; don't double up with the floating label
+  if (near !== pPanelShown) { pPanelShown = near; pPanel.classList.toggle("show", near); }
+  if (near) updatePrestigePanel();
+}
+// The reset is a big moment: dice lift off and vanish, the board flashes, then the new run drops in with the bonus visible.
+async function doPrestige() {
+  const st = prestigeStatus();
+  if (!st.ready || prestiging) { if (!st.ready) SFX.no(); return false; }
+  prestiging = true;
+  const newLv = S.prestige + st.avail, oldN = N, grow = boardSizeFor(newLv) !== oldN;
+  SFX.rev(); SFX.thunk();
+  mine.clearDice(true);
+  mine.tiles.forEach((t, i) => { const o = (N - 1) / 2, d = Math.hypot(Math.floor(i / N) - o, i % N - o);
+    tween(480, e => { t.material.emissive.setHex(0xffd23f); t.material.emissiveIntensity = Math.sin(Math.PI * e) * .9; }, d * 55).then(() => t.material.emissive.setHex(0)); });
+  await wait(540);
+  S.prestige = newLv; S.points = 0; S.shown = 0; S.runPoints = 0; S.earned = []; S.bought = 0; S.speedLv = 0; S.comboLv = 0;
+  if (grow) {
+    N = boardSizeFor(newLv);
+    const colors = theirs.cells.filter(Boolean).map(d => d.color);
+    mine.resize(); theirs.resize();
+    colors.forEach(c => { const i = theirs.emptyCell(); if (i !== undefined) theirs.addDie(i, c, false); });
+    growFx(mine, oldN);
+  }
+  applyStats();
+  const start = startDice(newLv);
+  for (let k = 0; k < start; k++) { const i = mine.emptyCell(); if (i !== undefined) mine.addDie(i, CNAMES[k % 5], true); }
+  SFX.sparkle();
+  announce(`Prestige <b>✦${newLv}</b> · points ×<b>${fmtMult(Math.pow(1 + PRESTIGE.pointsPer, newLv))}</b>`);
+  updatePrestigePanel();
+  prestiging = false;
+  return true;
+}
+// Board growth: the base/rim expand and the new tiles settle in from the centre out.
+function growFx(b, oldN) {
+  const s0 = oldN / N;
+  for (const m of [b.geo[0], b.geo[1]]) { m.scale.set(s0, 1, s0); tween(560, e => { const s = s0 + (1 - s0) * easeOut(e); m.scale.set(s, 1, s); }); }
+  b.tiles.forEach((t, i) => { const o = (N - 1) / 2, d = Math.hypot(Math.floor(i / N) - o, i % N - o);
+    t.scale.set(.001, .001, .001); tween(520, e => { const s = Math.max(.001, easeOut(e)); t.scale.set(s, s, s); }, 150 + d * 55); });
+  SFX.sparkle();
+}
+pBtn.addEventListener("click", doPrestige);
 
 // ================================================================ player
 const player = new THREE.Group();
@@ -556,7 +710,7 @@ renderer.domElement.addEventListener("pointermove", e => {
   if (!drag || e.pointerId !== drag.id) return;
   pointerRay(e); if (!ray.ray.intersectPlane(dragPlane, hit)) return;
   drag.d.mesh.position.set(hit.x, TOP + DIE / 2 + 2.2, hit.z);
-  const c = Math.round(hit.x / CELL + 2), r = Math.round(hit.z / CELL + 2);
+  const o = (N - 1) / 2, c = Math.round(hit.x / CELL + o), r = Math.round(hit.z / CELL + o);
   const to = c >= 0 && c < N && r >= 0 && r < N ? r * N + c : drag.from;
   if (to !== drag.to) { mine.tiles[drag.to].scale.y = 1; drag.to = to; SFX.tick(2); }
   mine.tiles.forEach((t, i) => t.material.emissive.setHex(i === to ? 0x444444 : t.material.emissive.getHex() === 0x444444 ? 0 : t.material.emissive.getHex()));
@@ -607,7 +761,7 @@ function frame(t) {
     try { tw.fn(e); } catch (err) { console.error(err); tweens.splice(tweens.indexOf(tw), 1); tw.res(); continue; }
     if (e >= 1) { tweens.splice(tweens.indexOf(tw), 1); tw.res(); }
   }
-  mine.tick(); theirs.tick();
+  mine.tick(); theirs.tick(); prestigeTick(dt);
 
   if (mode === "walk") {
     let mx = stick.x + ((keys.d || keys.arrowright) ? 1 : 0) - ((keys.a || keys.arrowleft) ? 1 : 0);
@@ -640,7 +794,7 @@ function frame(t) {
 
   for (const p of pads) p.mesh.material.emissiveIntensity = S.points >= COST[p.k]() && canBuy(p.k) ? .45 + .3 * Math.sin(now / 200) : .05;
   for (const tg of tags) {
-    const s = mode === "walk" && camera.position.distanceTo(tg.world) < 110 ? screenOf(tg.world) : null;
+    const s = !tg.hidden && mode === "walk" && camera.position.distanceTo(tg.world) < 110 ? screenOf(tg.world) : null;
     tg.el.style.display = s ? "" : "none"; if (s) { tg.el.style.left = s.x + "px"; tg.el.style.top = s.y + "px"; }
   }
   // Counter eases toward the real total; rate is points over the last 10 seconds.
@@ -658,13 +812,19 @@ function frame(t) {
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
     st("dice", `${mine.cells.filter(Boolean).length} / ${N * N}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
     st("speed", `every ${secs(mine.rollMs)}`); st("best", fmt(S.best));
-    const goal = ["die", "combo", "speed"].filter(canBuy).sort((a, b) => COST[a]() - COST[b]())[0];
-    document.getElementById("goalName").textContent = goal ? `${NAMES[goal]} · ${fmt(COST[goal]())}` : "Everything bought";
-    document.getElementById("goalBar").style.width = goal ? Math.min(100, S.points / COST[goal]() * 100) + "%" : "100%";
+    const goal = ["die", "combo", "speed"].filter(canBuy).sort((a, b) => COST[a]() - COST[b]())[0], pst = prestigeStatus();
+    if (pst.ready || !goal) { // everything bought, or the next prestige is the best move → point at prestige
+      document.getElementById("goalName").textContent = `Prestige → ✦${pst.to}`;
+      document.getElementById("goalBar").style.width = Math.min(100, S.runPoints / pst.need * 100) + "%";
+    } else {
+      document.getElementById("goalName").textContent = `${NAMES[goal]} · ${fmt(COST[goal]())}`;
+      document.getElementById("goalBar").style.width = Math.min(100, S.points / COST[goal]() * 100) + "%";
+    }
   }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
-window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy }; // test hook
+window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy, // test hook
+  doPrestige, prestigeStatus, get N() { return N; }, addRun: v => { S.points += v; S.runPoints += v; } }; // prestige test hooks
 </script>
 </body></html>
