@@ -48,6 +48,7 @@
   .pop.grp { font-size: 17px; background: rgba(22,16,44,.88); border: 2px solid var(--c, #fff); border-radius: 10px; padding: 1px 8px 2px; text-shadow: none; }
   .pop.grp.res { font-size: 21px; color: #ffe27a; }
   .pop.grp small { font-size: 12px; opacity: .8; margin-left: 3px; }
+  .pop.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c, #fff); box-shadow: 0 0 10px var(--c, #fff); }
   .pop.announce { font-size: 17px; background: rgba(22,16,44,.9); border-radius: 12px; padding: 5px 14px; color: #fff; text-shadow: none;
     animation: popIn .25s ease-out, fadeUp 2.2s ease-in forwards; white-space: nowrap; }
   .pop.announce b { color: #ffe27a; }
@@ -63,6 +64,8 @@
   .sheet .ln i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
   .sheet .ln i.chain { background: #e0a800; transform: rotate(45deg) scale(.8); }
   .sheet .ln .v { margin-left: auto; white-space: nowrap; } .sheet .ln .v b { color: #b07800; }
+  .sheet .ln em { font-style: normal; font-size: 10px; background: #2a2238; color: #f6f0e1; border-radius: 7px; padding: 0 5px; }
+  .sheet .ln em:empty { display: none; } .sheet .ln.again .v b { display: inline-block; animation: bump .25s ease-out; }
   .sheet .tot { border-top: 2px solid rgba(0,0,0,.12); margin-top: 3px; padding-top: 3px; display: flex; justify-content: space-between; font-weight: 900; font-size: 14px; }
   @keyframes writeIn { from { opacity: 0; transform: translateX(-8px); } }
   @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(.3); } 70% { transform: translate(-50%, -50%) scale(1.25); } }
@@ -195,9 +198,14 @@
   .rollBtn.hot { color: #fff; text-shadow: 0 1px 2px rgba(80,0,0,.6); }
   .rollBtn.hot .heatRing { animation: heatFlick .22s ease-in-out infinite alternate; }
   @keyframes heatFlick { to { inset: -9px; opacity: .8; } }
+  .rollBtn .rollQ { position: absolute; top: -4px; right: -12px; min-width: 30px; height: 26px; padding: 0 6px; border-radius: 13px; display: none;
+    align-items: center; justify-content: center; background: #1d1530; color: #ffe27a; border: 2px solid #ffd23f; font: 900 14px "Trebuchet MS", sans-serif;
+    text-shadow: none; box-shadow: 0 3px 8px rgba(0,0,0,.4); }
+  .rollBtn .rollQ.on { display: flex; } .rollBtn .rollQ.up { animation: bump .16s ease-out; }
   @keyframes rollTap { 50% { transform: translateX(-50%) scale(1.13); } }
   body.boardView .rollBtn { left: 20px; bottom: 20px; transform: none; width: 80px; height: 80px; font-size: 17px; }
-  body.boardView .rollBtn:active { transform: translateY(2px); }
+  body.boardView .rollBtn:active { transform: translateY(2px); } body.boardView .rollBtn.tap { animation-name: rollTapB; }
+  @keyframes rollTapB { 50% { transform: scale(1.13); } }
   /* overlays: book / shop / bag */
   .overlay { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8,6,18,.6); pointer-events: auto; }
   .overlay.open { display: flex; }
@@ -236,7 +244,7 @@
   <div class="goal"><div class="gl">NEXT</div><div class="gn" id="goalName"></div><div class="bar"><i id="goalBar"></i></div></div>
   <div class="stats" id="stats"><div data-s="dice"><span>Dice</span><b></b></div><div data-s="combo"><span>Combo</span><b></b></div>
     <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="luck"><span>Luck</span><b></b></div></div>
-  <div class="sheet"><h4>LAST ROLL</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
+  <div class="sheet"><h4>SCORED</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
   <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
   <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll mode</button></div>
   <!-- menu: open the collection book, shop and storage shelf (both views) -->
@@ -256,7 +264,7 @@
     <div class="pNeed" id="pNeed"></div>
   </div>
   <div id="stick"><i></i></div>
-  <button class="rollBtn" id="rollBtn"><span>ROLL</span><small></small><i class="heatRing"></i></button>
+  <button class="rollBtn" id="rollBtn"><span>ROLL</span><small></small><i class="heatRing"></i><b class="rollQ"></b></button>
   <div class="boardBar">
     <button class="bDie" data-buy="cell"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" id="barCrate" data-act="crate"></button>
     <button class="bWalk" data-act="walk">Walk away</button>
@@ -446,9 +454,11 @@ function dieMaterials(spec) {
 let now = performance.now();
 // ?speed=N runs game time N times faster (rolls, timers, animations); walking stays real-time.
 const SPEED = Math.max(.1, +new URLSearchParams(location.search).get("speed") || 1);
-// ?roll=fill: playtest variant. The board scores only once every die has rolled; ROLL rolls the next unrolled die
-// and the timer rolls them one at a time. Default (?roll=all): every roll tumbles the whole board and scores it.
-const FILL = new URLSearchParams(location.search).get("roll") === "fill";
+// Roll modes (playtest variants). Default (?roll=all): every roll tumbles the whole board and scores it.
+// ?roll=fill: each roll rolls the next die; the board scores once every die has rolled.
+// ?roll=charge: each roll lights the cell under the next die; once every die's cell is lit, the whole board rolls.
+const ROLL = new URLSearchParams(location.search).get("roll") || "all";
+const FILL = ROLL === "fill", CHARGE = ROLL === "charge", PER_DIE = FILL || CHARGE;
 const tweens = [];
 function tween(dur, fn, delay = 0) { return new Promise(res => tweens.push({ t0: now + delay, dur: Math.max(1, dur), fn, res })); }
 const wait = ms => tween(ms, () => {});
@@ -464,9 +474,7 @@ class Board {
     this.buildGeometry();
     this.cells = Array(N * N).fill(null);
     this.next = now + 1200; this.rollMs = 2000; this.combo = 1; this.pointsMult = 1;
-    this.epoch = 0; this.pending = []; // pacing: epoch invalidates a superseded playback; pending = uncredited step pops
-    this.run = 0;
-    this.q = []; this.gaps = []; this.inflight = []; this.playing = false; this.gen = 0; // my board's presentation queue
+    this.glows = []; this.painted = []; this.marked = new Set(); this.markAt = []; // tile light: scored groups, Charge marks
   }
   // Build base, rim, roll-timer strip and tiles for the current N. Called at construction and after a board grows.
   buildGeometry() {
@@ -514,7 +522,7 @@ class Board {
   }
   // Remove every die (optionally with a lift-off-and-vanish effect for the prestige reset).
   clearDice(effect) {
-    if (this.mine) this.flushQueue();
+    if (this.mine) flushBubbles(); this.marked.clear();
     this.cells.forEach((d, k) => {
       if (!d) return; const mesh = d.mesh;
       if (effect) tween(480, e => { mesh.position.y = (TOP + DIE / 2) + e * e * 42; mesh.scale.setScalar(Math.max(.001, 1 - e)); mesh.rotation.x += .25; }, k * 12)
@@ -525,10 +533,10 @@ class Board {
   }
   // Grow (or shrink) the board to the current global N: tear down geometry, rebuild it, reset the cell grid.
   resize() {
-    if (this.mine) this.flushQueue();
-    this.clearLinks();
+    if (this.mine) flushBubbles(); this.marked.clear();
+    for (const m of [...this.links.children]) this.links.remove(m);
     for (const m of this.geo) { this.group.remove(m); m.geometry.dispose(); m.material.dispose(); }
-    this.geo = []; this.buildGeometry(); this.cells = Array(N * N).fill(null); this.next = now + this.rollMs;
+    this.geo = []; this.glows = []; this.painted = []; this.buildGeometry(); this.cells = Array(N * N).fill(null); this.next = now + this.rollMs;
   }
   cellPos(i) { const o = (N - 1) / 2; return new THREE.Vector3((i % N - o) * CELL, TOP + DIE / 2, (Math.floor(i / N) - o) * CELL); }
   world(i, dy = 0) { return this.cellPos(i).add(this.group.position).add(new THREE.Vector3(0, dy, 0)); }
@@ -594,219 +602,117 @@ class Board {
     steps.push(...groups.sort(byPts), ...chains.sort(byPts));
     return { steps, total: steps.reduce((t, g) => t + g.pts, 0), dice: [...this.cells] };
   }
-  // One die's tumble onto face slot idx. Follows the die if it is swapped to another cell mid-air.
+  // One die's tumble onto face slot idx, from wherever the die is (a newer tumble of the same die takes over
+  // mid-air). Follows the die if it is swapped to another cell. Resolves true if no newer tumble took over.
   tumbleDie(d, idx, dur, h, turns, delay = 0) {
-    const q0 = d.mesh.quaternion.clone(), q1 = upQuatSlot(idx, rnd(4)), home = this.cellPos(this.cells.indexOf(d));
+    const tok = d.tok = (d.tok || 0) + 1; d.tumbling = true;
+    const q0 = d.mesh.quaternion.clone(), q1 = upQuatSlot(idx, rnd(4)), y0 = d.mesh.position.y - (TOP + DIE / 2);
     const axis = new THREE.Vector3(Math.random() - .5, 0, Math.random() - .5).normalize();
-    this._tum = (this._tum || 0) + 1; this.tumbling = true;
     return tween(dur, e => {
-      const c = this.cells.indexOf(d), p = c >= 0 ? this.cellPos(c) : home;
-      d.mesh.position.set(p.x, p.y + Math.sin(Math.PI * e) * h, p.z);
+      if (d.tok !== tok) return;
+      const c = this.cells.indexOf(d); if (c < 0) return; const p = this.cellPos(c);
+      d.mesh.position.set(p.x, p.y + y0 * (1 - e) + Math.sin(Math.PI * e) * h, p.z);
       const q = q0.clone().slerp(q1, easeOut(e));
       if (turns) q.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, (1 - easeOut(e)) * turns * Math.PI * 2));
       d.mesh.quaternion.copy(q);
-    }, delay).then(() => { this.tumbling = --this._tum > 0; });
+    }, delay).then(() => { if (d.tok !== tok) return false; d.tumbling = false; return true; });
   }
-  snapDie(d, idx) { const c = this.cells.indexOf(d); if (c >= 0) d.mesh.position.copy(this.cellPos(c)); d.mesh.quaternion.copy(upQuatSlot(idx, rnd(4))); }
+  bumpDie(d, amt = .14, ms = 160, delay = 0) { tween(ms, k => d.mesh.scale.setScalar(d.base * (1 + amt * Math.sin(Math.PI * k))), delay); }
 
   // The neighbour's board: whole-board rolls on its timer, shown with a far pop.
   async roll() {
-    this.clearLinks();
     const jobs = [];
     for (const d of this.cells) if (d) { const idx = rnd(6); d.faceIdx = idx; d.face = d.faceVals[idx]; jobs.push(this.tumbleDie(d, idx, 680, 3, 1 + rnd(2), Math.random() * 110)); }
     const res = this.score();
     await Promise.all(jobs);
-    res.steps.forEach(st => this.highlight(st)); farPop(this.group.position.clone().add(new THREE.Vector3(0, 9, 0)), "+" + fmt(res.total));
+    res.steps.forEach(st => this.glow(st, this.rollMs * .6)); farPop(this.group.position.clone().add(new THREE.Vector3(0, 9, 0)), "+" + fmt(res.total));
   }
 
-  // ---- my board: rolls resolve now, the screen shows them in order -----------------------------------
-  // A roll's faces and score are decided the instant it happens, so no tap is ever wasted. The queue then shows
-  // each result in order (tumble, then the scoring playback). Each result's time budget follows the recent pace
-  // and shrinks as the queue backs up; past MAXQ results waiting, the oldest are banked at once, so the screen
-  // never trails the game by more than a moment.
-  // Whole-board mode: every die (not held) rolls.
-  logicRoll() {
-    const faces = new Map();
-    for (const d of this.cells) if (d && !d.held) { const idx = rnd(6); d.faceIdx = idx; d.face = d.faceVals[idx]; faces.set(d, idx); }
-    if (faces.size) this.enqueue({ kind: "roll", faces, res: this.score() });
+  // ---- my board: a roll tumbles at once; its score joins the bubble queue ----------------------------
+  // Dice never wait for scoring. Every roll (a tap or the timer) tumbles right away, taking over any tumble still in
+  // the air. The score is decided now and handed to the bubble queue (below the class), which shows each group's
+  // points on their way to the total and gets terser as it backs up.
+  // One roll: the whole board (default), the next die (Roll each die) or the next cell (Charge).
+  step() { return CHARGE ? this.markNext() : FILL ? this.rollNext() : this.rollAll(); }
+  // Every die not held rolls together. The tumble shortens to fit the time since the last one.
+  rollAll() {
+    const gap = now - (this.lastAll ?? -1e9); this.lastAll = now;
+    const dur = Math.round(Math.max(150, Math.min(680, gap * .85))), big = dur >= 400;
+    let land = 0;
+    for (const d of this.cells) if (d && !d.held) {
+      const idx = rnd(6), delay = big ? Math.random() * 110 * dur / 680 : 0; d.faceIdx = idx; d.face = d.faceVals[idx];
+      land = Math.max(land, delay + dur); this.tumbleDie(d, idx, dur, big ? 2.6 + Math.random() * 1.6 : 1.2, big ? 1 + rnd(2) : 0, delay);
+    }
+    if (!land) return false;
+    if (big) { SFX.rattle(); wait(land).then(() => SFX.land(.3)); } else SFX.pick();
+    queueScore(this, this.score(), now + land); return true;
   }
-  // Fill mode (?roll=fill): dice that haven't rolled this board sit dimmed; each roll lights one, and the board
-  // scores once every die has rolled. The next roll after that starts a new board.
-  dieMs() { return this.rollMs / 4; }            // the timer's pace per die; it also waits while a board plays back
+  // Roll each die: dice not yet rolled this board sit dimmed; each roll lights the next one, and the board scores
+  // the moment its last die lands. The roll after that starts a new board.
+  dieMs() { return this.rollMs / 4; }            // the timer's pace per die (or per cell in Charge)
   setLit(d, on) { for (const m of d.mesh.material) m.color.setScalar(on ? 1 : .3); }
-  logicFill() {
+  rollNext() {
     const live = this.cells.filter(Boolean);
     if (live.length && live.every(d => d.rolled)) {
-      if (!this.boardScored) this.enqueue({ kind: "score", res: this.score() });   // a die left the board mid-way
-      live.forEach(d => d.rolled = false); this.boardScored = false; this.newBoard = true;
+      if (!this.boardScored) queueScore(this, this.score(), now);   // a die left the board before its turn
+      live.forEach(d => { d.rolled = false; this.setLit(d, false); }); this.boardScored = false;
     }
     const d = this.cells.find(x => x && !x.rolled && !x.held); if (!d) return false;
+    const gap = now - (this.lastDie ?? -1e9); this.lastDie = now;
+    const dur = Math.round(Math.max(150, Math.min(320, gap * 1.5)));
     const idx = rnd(6); d.faceIdx = idx; d.face = d.faceVals[idx]; d.rolled = true;
-    this.enqueue({ kind: "die", d, idx, first: !!this.newBoard }); this.newBoard = false;
-    if (this.cells.every(x => !x || x.rolled)) { this.boardScored = true; this.enqueue({ kind: "score", res: this.score() }); }
+    SFX.pick();
+    this.tumbleDie(d, idx, dur, 2, 1).then(last => { if (!last) return; this.setLit(d, d.rolled); SFX.land(.2); this.bumpDie(d); });
+    if (this.cells.every(x => !x || x.rolled)) {
+      this.boardScored = true; queueScore(this, this.score(), now + dur);
+      wait(dur).then(() => {                      // the full board gives a quick ripple
+        this.cells.forEach((x, k) => { if (x && !x.tumbling) this.bumpDie(x, .1, 180, (k % N + Math.floor(k / N)) * 15); });
+        if (now - (this.lastRev ?? -1e9) > 700) SFX.rev(); this.lastRev = now;
+      });
+    }
     return true;
   }
-  enqueue(e) {
-    if (e.kind !== "die") { const t = this.lastResultAt ?? now - 4000; this.gaps.push(now - t); this.lastResultAt = now; if (this.gaps.length > 4) this.gaps.shift(); }
-    this.q.push(e);
-    if (this.results() > MAXQ) this.bankOldest(this.results() - MAXQ);
-    if (!this.playing) this.pump();
-  }
-  // Recent average gap between results; a slowdown counts at once (the latest gap), a speed-up through the queue.
-  pace() { return this.gaps.length ? Math.max(this.gaps[this.gaps.length - 1], this.gaps.reduce((a, b) => a + b, 0) / this.gaps.length) : 4000; }
-  results() { return this.q.filter(e => e.kind !== "die").length; }
-  async pump() {
-    this.playing = true; const gen = this.gen;
-    while (this.q.length && gen === this.gen) {
-      const e = this.q.shift();
-      await (e.kind === "die" ? this.showDie(e) : this.showResult(e));
-    }
-    if (gen === this.gen) this.playing = false;
-  }
-  // Too far behind: the oldest n results skip their animation. Dice snap to their faces, points bank at once.
-  bankOldest(n) {
-    let total = 0, count = 0, last = null;
-    while (count < n && this.q.length) {
-      const e = this.q.shift();
-      if (e.kind === "die") { this.snapDie(e.d, e.idx); if (FILL) this.setLit(e.d, true); continue; }
-      if (e.kind === "roll") e.faces.forEach((idx, d) => this.snapDie(d, idx));
-      total += e.res.total; count++; last = e.res; S.best = Math.max(S.best, e.res.total);
-    }
-    if (!count) return;
-    earn(total); sheetMode("list");
-    if (count === 1) sheetListLine(stepName(last.steps.reduce((m, st) => st.pts > m.pts ? st : m, last.steps[0])), total, last.steps);
-    else sheetListLine(`${count} rolls`, total);
-  }
-  async showDie(e) {
-    if (e.first) { this.clearLinks(); for (const d of this.cells) if (d && d !== e.d) this.setLit(d, false); }
-    const behind = this.q.filter(x => x.kind === "die").length;
-    const dur = Math.max(160, 320 / (1 + behind * .25));
-    SFX.pick();
-    this.inflight.push(this.tumbleDie(e.d, e.idx, dur, 2, 1).then(() => {
-      if (FILL) this.setLit(e.d, true); SFX.land(.2);
-      tween(160, k => e.d.mesh.scale.setScalar(e.d.base * (1 + .14 * Math.sin(Math.PI * k))));
-    }));
-    await wait(Math.max(30, 110 / (1 + behind)));           // the next die starts while this one is in the air
-  }
-  // Time for one result: the recent pace between results, shared with every result still waiting.
-  budget() { return Math.max(160, Math.min(2600, this.pace() * .92 / (1 + this.results()))); }
-  async showResult(e) {
-    const epoch = this.epoch, t0 = now;
-    let budget = this.budget();
-    if (e.kind === "roll") {                                   // whole board: every die tumbles, then the playback
-      this.clearLinks();
-      const big = budget >= 900, dur = Math.round(Math.max(150, Math.min(700, budget * .3)));
-      const jobs = [];
-      e.faces.forEach((idx, d) => jobs.push(this.tumbleDie(d, idx, dur, big ? 2.6 + Math.random() * 1.6 : 1.2, big ? 1 + rnd(2) : 0, big ? Math.random() * 110 * dur / 700 : 0)));
-      if (big) SFX.rattle();
-      await Promise.all(jobs); if (big) SFX.land(.3);
-    } else {                                                   // fill: wait for the dice in the air, flash the full board
-      await Promise.all(this.inflight); this.inflight = [];
-      const fd = Math.round(Math.max(80, Math.min(300, budget * .15)));
-      this.cells.forEach((d, k) => { if (d) tween(fd, x => { for (const m of d.mesh.material) m.color.setScalar(1 + .6 * Math.sin(Math.PI * x)); }, (k % N + Math.floor(k / N)) * fd / 12); });
-      for (let k = 0; k < N * N; k++) if (this.cells[k]) { const m = this.tiles[k].material; tween(fd, x => { m.emissive.setHex(0xffe27a); m.emissiveIntensity = Math.sin(Math.PI * x) * .5; }); }
-      SFX.rev(); await wait(fd);
-    }
-    if (this.epoch !== epoch) return;
-    budget = Math.max(120, budget - (now - t0));
-    const res = e.res; S.best = Math.max(S.best, res.total);
-    if (budget >= 700) { sheetMode("roll"); sheetStart(); this.run = 0; await this.playScore(res, epoch, budget); return; }
-    // Quick: every group lights at once, one total pop flies, the ledger lists the roll on one line.
-    res.steps.forEach(st => this.highlight(st));
-    const best = res.steps.reduce((m, st) => st.pts > m.pts ? st : m, res.steps[0]);
-    earn(res.total); sheetMode("list"); sheetListLine(best ? stepName(best) : "Roll", res.total, res.steps);
-    flyGhost(popAt(this.group.position.clone().add(new THREE.Vector3(0, 5, 0)), "+" + fmt(res.total), "big"));
-    await wait(budget);
-  }
-  // Bank everything waiting and stop the show (the board is being reset or rebuilt).
-  flushQueue() {
-    if (!this.q) return;
-    this.bankOldest(Infinity); this.q = []; this.gen++; this.epoch++; this.playing = false; this.inflight = [];
-    this.finishPlayback();
+  // Charge: each roll lights the cell under the next die (centre out); when every die's cell is lit, they all roll.
+  markNext() {
+    const idxs = this.order().filter(i => this.cells[i]);
+    const i = idxs.find(i => !this.marked.has(i)); if (i === undefined) return false;
+    this.marked.add(i); this.markAt[i] = now; SFX.tick(this.marked.size);
+    if (idxs.every(i => this.marked.has(i))) { this.marked.clear(); this.rollAll(); }
+    return true;
   }
 
-  // A step's floating "sum ×multiplier" pop over the board. Reused by the paced and collapsed playbacks.
-  groupPop(st) {
-    const hex = stepHex(st);
+  // Where a group's pop sits: over its top die, centred on its dice.
+  popOver(st, cls) {
     const top = st.cells.reduce((m, i) => this.cellPos(i).z < this.cellPos(m).z ? i : m, st.cells[0]);
     const cx = st.cells.reduce((t, i) => t + this.cellPos(i).x, 0) / st.cells.length;
-    const at = this.group.position.clone().add(new THREE.Vector3(st.kind === "loose" ? 0 : cx, TOP + DIE + .4, st.kind === "loose" ? (N * CELL) / 2 + 1.6 : this.cellPos(top).z - DIE * .55));
-    const el = popAt(at, "", "grp");
-    if (el) {
-      el.style.setProperty("--c", "#" + new THREE.Color(hex).getHexString());
-      el.innerHTML = st.kind === "loose" ? `${fmt(st.sum)}<small>loose</small>` : `${fmt(st.sum)}<small>×${fmtMult(st.mult)}</small>`;
-    }
+    const at = this.group.position.clone().add(new THREE.Vector3(cx, TOP + DIE + .4, this.cellPos(top).z - DIE * .55));
+    const el = popAt(at, "", cls);
+    if (el) el.style.setProperty("--c", "#" + new THREE.Color(stepHex(st)).getHexString());
     return el;
   }
-  // Groups start a short gap apart, smallest first, and overlap. Each lights up, shows "sum ×multiplier", turns
-  // into the result, is written on the Last roll list and flies to the total. The whole thing is scaled to fit the
-  // roll interval: budget = time until the next roll. At tight budgets it collapses to all groups at once.
-  async playScore(res, epoch, budget) {
-    const steps = res.steps, n = steps.length;
-    const gap0 = Math.min(420, 2200 / Math.max(1, n));
-    const natural = (n - 1) * gap0 + 750 + 420 + 480;             // the leisurely (2s) timeline
-    const f = Math.min(1, budget / natural);
-    if (f < 0.5) return this.playCollapsed(steps, res, budget, epoch);
-    const gap = gap0 * f;
-    // All entries exist up front so a flush mid-playback can bank even steps that haven't started their stagger yet.
-    this.pending = steps.map(st => ({ st, pts: st.pts, el: null, done: false }));
-    await Promise.all(this.pending.map((entry, k) => wait(k * gap).then(() => this.playStep(entry, k, res, f, epoch))));
+  // A group's floating "sum ×multiplier" pop.
+  groupPop(st) {
+    const el = this.popOver(st, "grp");
+    if (el) el.innerHTML = st.kind === "loose" ? `${fmt(st.sum)}<small>loose</small>` : `${fmt(st.sum)}<small>×${fmtMult(st.mult)}</small>`;
+    return el;
   }
-  async playStep(entry, k, res, f, epoch) {
-    if (this.epoch !== epoch || entry.done) return;
-    const st = entry.st;
-    this.highlight(st);
-    st.cells.forEach((i, n) => { const d = res.dice[i]; tween(200 * f, e => d.mesh.scale.setScalar(d.base * (1 + .12 * Math.sin(Math.PI * e))), n * 25 * f); });
-    entry.el = this.groupPop(st);
-    SFX.link(k * 2);
-    await wait((st.kind === "loose" ? 500 : 750) * f);
-    if (this.epoch !== epoch || entry.done) return;
-    if (entry.el && st.kind !== "loose") { entry.el.classList.add("res"); entry.el.textContent = fmt(st.pts); SFX.tick(k + 4); }
-    sheetLine(st); this.run += st.pts; sheetTotal(this.run);
-    await wait(420 * f);
-    if (this.epoch !== epoch || entry.done) return;
-    this.creditStep(entry, k);
-    await wait(480 * f);
-  }
-  // Tight interval: show every group's "sum ×multiplier" at once, one short hold to read, then convert and fly together.
-  async playCollapsed(steps, res, budget, epoch) {
-    this.pending = steps.map(st => {
-      this.highlight(st);
-      st.cells.forEach((i, n) => { const d = res.dice[i]; tween(160, e => d.mesh.scale.setScalar(d.base * (1 + .1 * Math.sin(Math.PI * e))), n * 12); });
-      return { el: this.groupPop(st), pts: st.pts, st, done: false };
-    });
-    SFX.link(2);
-    await wait(Math.max(140, budget * 0.42));
-    if (this.epoch !== epoch) return;
-    for (const e of this.pending) {
-      const st = e.st;
-      if (e.el && st.kind !== "loose") { e.el.classList.add("res"); e.el.textContent = fmt(st.pts); }
-      sheetLine(st); this.run += st.pts; sheetTotal(this.run);
-    }
-    SFX.tick(5);
-    await wait(Math.max(90, budget * 0.18));
-    if (this.epoch !== epoch) return;
-    this.pending.forEach((e, k) => this.creditStep(e, k));
-    await wait(Math.max(120, budget * 0.25));
-  }
-  // Credit a step's points now and send its pop flying (cosmetic — the points are already banked).
-  creditStep(entry, k = 0) {
-    if (entry.done) return; entry.done = true;
-    earn(entry.pts);
-    if (entry.el) flyGhost(entry.el, k);
-  }
-  // A new roll arrived mid-playback: bank every uncredited step at once, clear its pops and links, and reset.
-  finishPlayback() {
-    for (const e of this.pending) { if (!e.done) { e.done = true; earn(e.pts); } if (e.el) e.el.remove(); }
-    this.pending = []; this.run = 0; this.clearLinks();
-    totalEl.classList.remove("bump"); void totalEl.offsetWidth; totalEl.classList.add("bump");
-  }
-  highlight(st) {
+  // A scored group lights up for ms: its cells glow (chains: links only) and links join its dice, fading on their own.
+  glow(st, ms, links = true) {
     const hex = stepHex(st);
-    st.links.forEach(l => this.addLink(l, hex, st.kind === "chain" && l.both ? .55 : 0));
-    if (st.kind !== "chain") st.cells.forEach(i => { const m = this.tiles[i].material; m.emissive.setHex(hex); m.emissiveIntensity = st.kind === "loose" ? .12 : .45; });
+    if (st.kind !== "chain" || !links) for (const i of st.cells) this.glows[i] = { hex, t0: now, ms, int: st.kind === "loose" ? .12 : st.kind === "chain" ? .3 : .45 };
+    if (links) st.links.forEach(l => this.addLink(l, hex, st.kind === "chain" && l.both ? .55 : 0, ms));
   }
-  addLink(l, hex, off) {
+  // Tile light each frame: a scored group's glow, else a Charge mark (a bright flash as it lands, then steady).
+  paintTiles() {
+    for (let i = 0; i < this.tiles.length; i++) {
+      const g = this.glows[i], m = this.tiles[i].material; let hex = 0, int = 0;
+      if (g) { const e = (now - g.t0) / g.ms; if (e >= 1) this.glows[i] = null; else { hex = g.hex; int = g.int * Math.min(1, e * 8, (1 - e) * 4); } }
+      if (!int && this.marked.has(i)) { hex = 0xfff0b0; int = .55 + .6 * Math.max(0, 1 - (now - this.markAt[i]) / 220); }
+      if (int) { m.emissive.setHex(hex); m.emissiveIntensity = int; this.painted[i] = true; }
+      else if (this.painted[i]) { m.emissive.setHex(0); m.emissiveIntensity = 1; this.painted[i] = false; }
+    }
+  }
+  addLink(l, hex, off, ms) {
     const a = this.cellPos(l.i), b = this.cellPos(l.j), horiz = a.z === b.z;
     const bar = new THREE.Mesh(new THREE.BoxGeometry(horiz ? CELL : .85, .22, horiz ? .85 : CELL), new THREE.MeshBasicMaterial({ color: hex, transparent: true }));
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(horiz ? CELL + .6 : 1.7, horiz ? 1.7 : CELL + .6),
@@ -821,11 +727,8 @@ class Board {
       new THREE.MeshBasicMaterial({ color: hex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     flash.position.set(bar.position.x, TOP + DIE + .12, bar.position.z); this.group.add(flash);
     tween(650, e => { flash.material.opacity = 1 - e * e; }).then(() => { this.group.remove(flash); flash.geometry.dispose(); flash.material.dispose(); });
-  }
-  clearLinks() {
-    const old = [...this.links.children]; this.tiles.forEach(t => t.material.emissive.setHex(0));
-    old.forEach(m => tween(150, e => { m.material.opacity = (m.material.blending === THREE.AdditiveBlending ? .45 : 1) * (1 - e); })
-      .then(() => { this.links.remove(m); m.geometry.dispose(); m.material.dispose(); }));
+    wait(ms).then(() => tween(150, e => { bar.material.opacity = 1 - e; glow.material.opacity = .45 * (1 - e); }))
+      .then(() => { this.links.remove(bar, glow); for (const m of [bar, glow]) { m.geometry.dispose(); m.material.dispose(); } });
   }
   // Better combos: a light wave sweeps the board and the rim turns to the next metal.
   comboFx() {
@@ -838,25 +741,24 @@ class Board {
   }
   // Faster rolls: the timer strip flashes and every die gives a quick hop.
   speedFx() {
-    this.cells.forEach((d, i) => { if (!d || d.held) return; const p = this.cellPos(i); tween(240, e => { if (!this.tumbling) d.mesh.position.y = p.y + Math.sin(Math.PI * e) * .9; }, (i % N) * 30); });
+    this.cells.forEach((d, i) => { if (!d || d.held) return; const p = this.cellPos(i); tween(240, e => { if (!d.tumbling) d.mesh.position.y = p.y + Math.sin(Math.PI * e) * .9; }, (i % N) * 30); });
     tween(500, e => this.timer.material.color.setHex(Math.floor(e * 6) % 2 ? 0xffffff : 0x5aa0ff)).then(() => this.timer.material.color.setHex(0x5aa0ff));
   }
   tick() {
     let p;
-    if (FILL && this.mine) {
-      // The timer rolls one die per dieMs, and waits while a full board's playback runs.
-      if (now >= this.next && !this.playing) { this.next = now + this.dieMs(); this.logicFill(); }
-      if (this.playing) this.next = Math.max(this.next, now + 1);   // the timer waits while the screen catches up
-      // Strip = how much of the board has rolled, plus the share of the die the timer is working on.
-      const dice = this.cells.filter(Boolean), done = dice.filter(d => d.rolled).length;
-      const part = this.playing ? 0 : Math.min(1, Math.max(0, 1 - (this.next - now) / this.dieMs()));
-      p = dice.length ? Math.min(1, (done + (done < dice.length ? part : 0)) / dice.length) : 0;
+    if (this.mine && PER_DIE) {
+      if (now >= this.next) { this.next = now + this.dieMs(); this.step(); }   // the timer takes one step per dieMs
+      // Strip = how much of this board is done, plus the share of the step the timer is working on.
+      const dice = this.cells.filter(Boolean).length;
+      const done = CHARGE ? this.cells.filter((d, i) => d && this.marked.has(i)).length : this.cells.filter(d => d && d.rolled).length;
+      const part = Math.min(1, Math.max(0, 1 - (this.next - now) / this.dieMs()));
+      p = dice ? Math.min(1, (done + (done < dice ? part : 0)) / dice) : 0;
     } else {
-      if (now >= this.next) { this.next = now + this.rollMs; if (this.mine) this.logicRoll(); else this.roll(); }
+      if (now >= this.next) { this.next = now + this.rollMs; if (this.mine) this.rollAll(); else this.roll(); }
       p = Math.min(1, Math.max(0, 1 - (this.next - now) / this.rollMs));
     }
     if (this.timer) { this.timer.scale.x = Math.max(.001, p); this.timer.position.x = -this.timerL / 2 * (1 - p); }
-    this.updateDecos();
+    this.paintTiles(); this.updateDecos();
   }
 }
 
@@ -866,35 +768,69 @@ const stepHex = st => st.kind === "chain" ? 0xffe27a : st.kind === "loose" ? 0x9
   : COLORS[st.color] ? new THREE.Color(COLORS[st.color]).offsetHSL(0, .1, .12).getHex() : 0xbda7ff;
 const fmtMult = m => Number.isInteger(m) ? String(m) : m.toFixed(2).replace(/0$/, "");
 const linesEl = () => document.getElementById("lines");
-function sheetStart() { linesEl().innerHTML = ""; sheetTotal(0); }
-// The ledger has two modes: "roll" breaks one roll into its groups (slow rolls); "list" gives each roll one line
-// with its points (fast rolls), and the total of the lines shown.
-const MAXQ = 4;                                     // results allowed to wait before the oldest bank unseen
-let sheetM = "roll", listSum = [];
-function sheetMode(m) {
-  if (m === sheetM) return; sheetM = m; listSum = [];
-  document.querySelector(".sheet h4").textContent = m === "roll" ? "LAST ROLL" : "ROLLS"; sheetStart();
-}
-function sheetListLine(name, pts, steps) {
-  const best = steps && steps.length ? steps.reduce((m, st) => st.pts > m.pts ? st : m, steps[0]) : null;
-  const dot = !best ? `<i style="background:#9aa6c4"></i>` : best.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${best.kind === "loose" ? "#9aa6c4" : (COLORS[best.color] || "#bda7ff")}"></i>`;
-  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}</span><span class="v"><b>+${fmt(pts)}</b></span>`; linesEl().appendChild(ln);
-  listSum.push(pts);
-  while (linesEl().children.length > 9) { linesEl().firstChild.remove(); listSum.shift(); }
-  sheetTotal(listSum.reduce((a, b) => a + b, 0));
-}
 function sheetTotal(v) { document.getElementById("sheetTot").textContent = fmt(v); }
 function stepName(st) {
   return st.kind === "loose" ? `Loose · ${st.cells.length} ${st.cells.length === 1 ? "die" : "dice"}` : st.kind === "chain" ? `${WORDS[st.cells.length] || st.cells.length} ${st.n}s`
     : `${st.color[0].toUpperCase() + st.color.slice(1)} · ${st.cells.length} dice`;
 }
-function sheetLine(st) {
-  const name = stepName(st);
-  const dot = st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
-  const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${fmt(st.sum)} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
-  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
+const stepDot = st => st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
+// The ledger (board view): every scored group, newest at the bottom, and the total of everything it has listed.
+// Lines from a backed-up queue show only the points, and repeats of one group in a row fold into one line.
+let ledgerTot = 0, ledgerLast = null;
+function ledgerLine(st, lod) {
+  ledgerTot += st.pts; sheetTotal(ledgerTot);
+  const name = stepName(st), L = ledgerLast;
+  if (lod > 0 && L && L.lod > 0 && L.name === name) {
+    L.n++; L.pts += st.pts;
+    L.el.querySelector("em").textContent = L.n; L.el.querySelector(".v").innerHTML = `<b>+${fmt(L.pts)}</b>`;
+    L.el.classList.remove("again"); void L.el.offsetWidth; L.el.classList.add("again"); return;
+  }
+  const v = lod > 0 ? `<b>+${fmt(st.pts)}</b>` : st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${fmt(st.sum)} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
+  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${stepDot(st)}<span>${name}</span><em></em><span class="v">${v}</span>`; linesEl().appendChild(ln);
   while (linesEl().children.length > 9) linesEl().firstChild.remove();
+  ledgerLast = { name, lod, n: 1, pts: st.pts, el: ln };
 }
+
+// ---- the bubble queue: each scored group's points on their way to the total -------------------------
+// Rolls hand their groups here and never wait for them. Bubbles start one after another, each over its group.
+// How many other rolls are waiting picks the detail: none, the full "sum ×multiplier" turning into the points;
+// a few, the points fly straight up; more, a coloured dot with no number. Points bank as a bubble flies (all at
+// once past BUBBLE_CAP waiting, or when the board is reset).
+const BUBBLE_GAP = [340, 120, 40];      // ms between bubble starts, by detail level
+const BUBBLE_CAP = 40;
+const bubbles = [], bubblesLive = new Set(); let nextBubble = 0;
+function queueScore(board, res, at) {
+  S.best = Math.max(S.best, res.total);
+  for (const st of res.steps) bubbles.push({ board, st, res, at, done: false });
+}
+function bankBubble(b) { if (b.done) return; b.done = true; earn(b.st.pts); }
+function bubbleFrame() {
+  while (bubbles.length > BUBBLE_CAP) { const b = bubbles.shift(); bankBubble(b); ledgerLine(b.st, 2); }
+  if (!bubbles.length || now < nextBubble || now < bubbles[0].at) return;
+  const b = bubbles.shift();
+  const others = new Set(bubbles.map(x => x.res)).size - (bubbles.length && bubbles[0].res === b.res ? 1 : 0);
+  const lod = others === 0 ? 0 : others <= 2 ? 1 : 2;
+  nextBubble = now + BUBBLE_GAP[lod]; playBubble(b, lod);
+}
+async function playBubble(b, lod) {
+  const { board, st } = b;
+  bubblesLive.add(b);
+  board.glow(st, [900, 450, 260][lod], lod < 2);
+  let el;
+  if (lod === 0) {
+    st.cells.forEach((i, n) => { const d = b.res.dice[i]; if (d) board.bumpDie(d, .12, 200, n * 25); });
+    SFX.link(Math.min(8, st.cells.length)); el = board.groupPop(st);
+    await wait(480); if (b.done) return gone();
+    if (el && st.kind !== "loose") { el.classList.add("res"); el.textContent = fmt(st.pts); SFX.tick(4); }
+  } else if (lod === 1) { el = board.popOver(st, "grp res"); if (el) el.textContent = "+" + fmt(st.pts); }
+  else el = board.popOver(st, "dot");
+  ledgerLine(st, lod);
+  if (lod === 0) { await wait(260); if (b.done) return gone(); }
+  bankBubble(b); flyGhost(el, lod === 2 ? 1 : 3); bubblesLive.delete(b);
+  function gone() { if (el) el.remove(); bubblesLive.delete(b); }
+}
+// The board is being reset or rebuilt: bank everything waiting or on screen.
+function flushBubbles() { for (const b of bubblesLive) bankBubble(b); bubblesLive.clear(); for (const b of bubbles.splice(0)) bankBubble(b); }
 function announce(html) {
   document.querySelectorAll(".pop.announce").forEach(n => n.remove());
   const el = popAt(mine.group.position.clone().add(new THREE.Vector3(0, TOP + DIE + 2, 0)), "", "announce"); if (!el) return;
@@ -990,32 +926,35 @@ const TAP_CURVE = [[0, 0], [3, 3], [6, 4], [10, 5]];   // taps in the last secon
 const tapRate = c => { for (let k = 1; k < TAP_CURVE.length; k++) { const [x0, y0] = TAP_CURVE[k - 1], [x1, y1] = TAP_CURVE[k];
   if (c <= x1) return y0 + (y1 - y0) * (c - x0) / (x1 - x0); } return TAP_CURVE[TAP_CURVE.length - 1][1]; };
 const tapBoost = () => (1 + .06 * S.speedLv) * buffs.reduce((m, b) => m * (b.speed || 1), 1);
-const TAP_GAP = 110;                                   // ms between tap rolls, so tumbles stay readable
-const taps = []; let rollBank = 0, lastTapRoll = -1e9, heat = 0;
+const TAP_GAP = 110;                                   // ms between whole-board tap rolls, so tumbles stay readable
+// Roll each die and Charge: every tap is one step (a die, or a cell), queued and worked off at up to DIE_RATE
+// steps a second (scaled like the curve); the count waiting shows on ROLL.
+const DIE_RATE = 8, TAP_QUEUE = 30;
+const taps = []; let rollBank = 0, lastTapRoll = -1e9, heat = 0, shownQ = 0;
 function manualRoll() {
   const t = performance.now();
   taps.push(t); while (taps[0] < t - 1000) taps.shift();
   const c = taps.length;
-  // Fill mode: every tap rolls one die. Whole-board mode: this tap's share of the rate at this pace.
-  rollBank = Math.min(2, rollBank + (FILL ? 1 : tapRate(c) / c * tapBoost()));
+  rollBank = Math.min(PER_DIE ? TAP_QUEUE : 2, rollBank + (PER_DIE ? 1 : tapRate(c) / c * tapBoost()));
   const btn = document.getElementById("rollBtn"); if (btn) { btn.classList.remove("tap"); void btn.offsetWidth; btn.classList.add("tap"); }
   tapFrame(); return true;
 }
 function tapFrame() {
   const t = performance.now();
   while (taps.length && taps[0] < t - 1000) taps.shift();
-  if (rollBank >= 1 && t - lastTapRoll >= (FILL ? 60 : TAP_GAP)) {
-    rollBank -= 1; lastTapRoll = t; S.rollsManual++;
-    if (FILL) mine.logicFill(); else { mine.logicRoll(); SFX.pick(); }   // neither path touches the timer's progress
-  }
+  const gap = PER_DIE ? 1000 / (DIE_RATE * tapBoost()) : TAP_GAP;
+  if (rollBank >= 1 && t - lastTapRoll >= gap && mine.step()) { rollBank -= 1; lastTapRoll = t; S.rollsManual++; }   // never touches the timer
   // Heat: the roll rate the current pace earns, eased so the button warms and cools smoothly.
-  const target = taps.length ? (FILL ? taps.length : tapRate(taps.length) * tapBoost()) : 0;
+  const target = taps.length ? (PER_DIE ? Math.min(taps.length, DIE_RATE * tapBoost()) : tapRate(taps.length) * tapBoost()) : 0;
   heat += (target - heat) * Math.min(1, (taps.length ? .25 : .08));
   const btn = document.getElementById("rollBtn"); if (!btn) return;
-  const h = Math.min(1, heat / (FILL ? 8 : 5));
+  const h = Math.min(1, heat / (PER_DIE ? DIE_RATE : 5));
   btn.style.setProperty("--heat", h.toFixed(3));
   btn.classList.toggle("hot", h > .62);
   btn.querySelector("small").textContent = heat >= .5 ? heat.toFixed(1) + "/s" : "";
+  // Taps waiting (Roll each die, Charge): a count on the button's corner.
+  const q = PER_DIE ? Math.floor(rollBank) : 0, qEl = btn.querySelector(".rollQ");
+  if (q !== shownQ) { qEl.textContent = q ? "+" + q : ""; qEl.classList.toggle("on", q > 0); if (q > shownQ) { qEl.classList.remove("up"); void qEl.offsetWidth; qEl.classList.add("up"); } shownQ = q; }
 }
 
 // ---- onboarding goals: a short chain that leads the first several minutes and pays out -------------
@@ -1049,12 +988,13 @@ function farPop(world, text) {
   if (camera.position.distanceTo(world) > 120) return;
   const el = popAt(world, text, "far"); if (el) setTimeout(() => el.remove(), 1100);
 }
+let lastFlyTick = 0;
 function flyEl(el, n, onEnd) {
   const r = totalEl.getBoundingClientRect(), x0 = parseFloat(el.style.left), y0 = parseFloat(el.style.top);
   const dx = r.left + r.width / 2 - x0, dy = r.top + r.height / 2 - y0;
   el.animate([{ transform: "translate(-50%,-50%)" }, { transform: `translate(calc(-50% + ${dx * .35}px), calc(-50% + ${dy * .2 - 30}px)) scale(1.1)`, offset: .35 },
     { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.5)`, opacity: .6 }], { duration: 480, easing: "cubic-bezier(.5,0,.75,.6)", fill: "forwards" })
-    .finished.then(() => { el.remove(); if (onEnd) onEnd(); SFX.tick(n); totalEl.classList.remove("bump"); void totalEl.offsetWidth; totalEl.classList.add("bump"); }).catch(() => {});
+    .finished.then(() => { el.remove(); if (onEnd) onEnd(); if (performance.now() - lastFlyTick > 45) { lastFlyTick = performance.now(); SFX.tick(n); } totalEl.classList.remove("bump"); void totalEl.offsetWidth; totalEl.classList.add("bump"); }).catch(() => {});
 }
 // flyGhost is cosmetic: the points were already banked.
 function flyGhost(el, n = 0) { if (el) flyEl(el, n, null); }
@@ -1207,8 +1147,8 @@ renderer.domElement.addEventListener("pointerdown", e => {
   if (mode === "walk") { orbit = { id: e.pointerId, x: e.clientX }; return; }
   pointerRay(e);
   const meshes = mine.cells.map(d => d && d.mesh).filter(Boolean);
-  const h = !mine.tumbling && ray.intersectObjects(meshes)[0]; if (!h) { manualRoll(); return; } // tap the board (not a die) to roll now
-  const from = mine.cells.findIndex(d => d && d.mesh === h.object), d = mine.cells[from];
+  const h = ray.intersectObjects(meshes)[0], from = h ? mine.cells.findIndex(d => d && d.mesh === h.object) : -1, d = mine.cells[from];
+  if (!h || d.tumbling) { manualRoll(); return; } // tap the board (or a die in the air) to roll now
   d.held = true; drag = { id: e.pointerId, from, d, to: from }; SFX.pick();
   renderer.domElement.setPointerCapture(e.pointerId);
 });
@@ -1242,7 +1182,7 @@ document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
 document.getElementById("rollBtn").addEventListener("click", manualRoll);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
-  if (k === "mode") { const q = new URLSearchParams(location.search); q.set("roll", FILL ? "all" : "fill"); location.search = q.toString(); return; }
+  if (k === "mode") { const q = new URLSearchParams(location.search); const M = ["all", "fill", "charge"]; q.set("roll", M[(M.indexOf(ROLL) + 1) % M.length]); location.search = q.toString(); return; }
   if (k === "cash") { S.points += 5000; SFX.coin(); }
   if (k === "crate") openCrate(true);                                 // free crate (test)
   if (k === "shiny") { crateForce = { shiny: true }; openCrate(true); } // force a shiny pull (test)
@@ -1364,7 +1304,7 @@ function frame(t) {
     try { tw.fn(e); } catch (err) { console.error(err); tweens.splice(tweens.indexOf(tw), 1); tw.res(); continue; }
     if (e >= 1) { tweens.splice(tweens.indexOf(tw), 1); tw.res(); }
   }
-  tapFrame(); mine.tick(); theirs.tick(); prestigeTick(dt);
+  tapFrame(); mine.tick(); theirs.tick(); bubbleFrame(); prestigeTick(dt);
   powersFrame(dt); // powers cooldowns, buffs, server luck, Mikey
   // crate machine: the sample die spins and bobs; glow when affordable
   cmDie.rotation.y += dt * 1.2; cmDie.position.y = 3.6 + Math.sin(now / 500) * .18;
@@ -1426,7 +1366,7 @@ function frame(t) {
     updateCrateButton();
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
     st("dice", `${mine.cells.filter(Boolean).length} / ${S.cells}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
-    st("speed", `every ${secs(FILL ? mine.dieMs() : mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
+    st("speed", `every ${secs(PER_DIE ? mine.dieMs() : mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
     checkGoals();
     const gn = document.getElementById("goalName"), gb = document.getElementById("goalBar"), pst = prestigeStatus();
     // Unlocking an empty cell is wasteful, so it's only a goal when a die is waiting in storage.
@@ -1748,7 +1688,7 @@ window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy,
   // storage / collection / shop
   renderStorage, openCollection, openShop, openBag, buyShopItem, SHOP, collectionMult, luck, sellValue, mergeSpecs,
   // active play + goals
-  manualRoll, FILL, GOALS, get goalIdx() { return S.goalIdx; },
+  manualRoll, ROLL, FILL, CHARGE, bubbles, get rollBank() { return rollBank; }, get ledgerTot() { return ledgerTot; }, GOALS, get goalIdx() { return S.goalIdx; },
   // powers
   POWERS, buffs, pstate, usePower, addBuff, stats, mikey,
   // prestige
