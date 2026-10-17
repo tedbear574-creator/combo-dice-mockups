@@ -3,12 +3,13 @@
 //   node scripts/prestige-sim.js
 //
 // It mirrors the v2 constants and scoring from tycoon-v2.html — rarity tiers, per-die multipliers, the scarce
-// board (cells unlock one at a time), and crate pulls — and drives two players:
-//   • free   — never spends Robux (luck ×1)
-//   • buyer  — buys a 15-min Luck Boost (×2) whenever one isn't running
-// and reports the game-time each hits the pacing milestones:
-//   first crate ~3-5 min · first rare-tier die < 15 min · board full < 1 h · top tier a multi-day chase (free).
-// Keep TIERS / COST / CRATE_* / scoring in sync with the matching sections of tycoon-v2.html.
+// board (cells unlock one at a time), crate pulls and the crate cooldown — and drives three players:
+//   • ACTIVE free  — a present player tapping ROLL (roll interval = the manual floor)
+//   • IDLE free    — the roll timer only, no tapping
+//   • ACTIVE buyer — tapping + a 15-min Luck Boost (×2) re-upped whenever it lapses
+// and reports the game-time each hits the pacing milestones. Active targets: first purchase ≤10s,
+// first crate ≤90s, a Rare in the first 2 min, board full ~20-40 min; idle clearly slower but never stuck;
+// the top tier a multi-day chase. Keep TIERS / COST / CRATE_* / scoring in sync with tycoon-v2.html.
 
 // ---- constants (mirror of tycoon-v2.html) ---------------------------------------------------
 const TIERS = [
