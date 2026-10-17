@@ -9,7 +9,7 @@
     touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
   canvas { display: block; }
   #hud { position: fixed; inset: 0; pointer-events: none; }
-  #hud button, #stick, .dev, .shinyMark { pointer-events: auto; }
+  #hud button, #stick, .dev { pointer-events: auto; }
   .total { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: rgba(22,16,44,.8); border-radius: 14px;
     padding: 3px 20px 5px; text-align: center; min-width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
   .total b { display: block; font-size: 27px; color: #ffd23f; line-height: 1.15; }
@@ -52,7 +52,7 @@
     animation: popIn .25s ease-out, fadeUp 2.2s ease-in forwards; white-space: nowrap; }
   .pop.announce b { color: #ffe27a; }
   @keyframes fadeUp { 0%, 70% { opacity: 1; } 100% { opacity: 0; margin-top: -40px; } }
-  .stats { position: absolute; top: 72px; left: 10px; width: 150px; background: rgba(22,16,44,.8); border-radius: 12px; padding: 6px 10px; font-size: 12px; }
+  .stats { position: absolute; z-index: 3; top: 72px; left: 10px; width: 150px; background: rgba(22,16,44,.8); border-radius: 12px; padding: 6px 10px; font-size: 12px; }
   .stats div { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; font-weight: 800; }
   .stats div span { opacity: .7; font-weight: 700; } .stats div b { color: #fff; transition: color .3s; }
   .stats div.flash b { color: #ffe27a; animation: bump .3s ease-out 2; }
@@ -91,11 +91,9 @@
     font: 900 12px "Trebuchet MS", sans-serif; color: #fff; box-shadow: inset 0 0 0 1.6px var(--c,#fff), 0 2px 8px rgba(0,0,0,.3); animation: chipIn .2s ease-out; white-space: nowrap; }
   .chip b { color: var(--c,#ffd23f); margin-left: auto; padding-left: 8px; }
   .chip .cbar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c,#ffd23f); transition: width .12s linear; }
+  .chip.server { background: linear-gradient(90deg, rgba(90,60,10,.95), rgba(60,40,8,.95)); box-shadow: inset 0 0 0 1.6px #ffd23f, 0 2px 10px rgba(255,210,63,.35); }
+  .chip.server .cn { color: #ffd23f; }
   @keyframes chipIn { from { opacity: 0; transform: translateX(-10px); } }
-  .shinyMark { position: absolute; width: 30px; height: 30px; margin: -15px; border-radius: 50%;
-    background: radial-gradient(circle at 40% 35%, #fff6cc, #ffd23f 55%, #c98a0b); box-shadow: 0 0 14px #ffd23f, 0 0 5px #fff;
-    transform: translate(-50%, -50%); animation: shinyPulse 1s ease-in-out infinite; }
-  @keyframes shinyPulse { 50% { transform: translate(-50%, -50%) scale(1.28); } }
   body.surging .pop { color: #ffd23f !important; text-shadow: 0 0 9px rgba(255,210,63,.85), 0 2px 0 rgba(0,0,0,.5); }
   body.surging .pop.grp.res, body.surging .pop.big { color: #ffe27a !important; }
   /* ---- specials: buy-bar button + picker overlay ---- */
@@ -180,6 +178,14 @@
   .crName { font: 900 20px "Trebuchet MS", sans-serif; }
   .crTier { font: 900 13px "Trebuchet MS", sans-serif; letter-spacing: .15em; text-transform: uppercase; }
   .crHint { position: absolute; bottom: 42px; font: 800 12px "Trebuchet MS", sans-serif; opacity: .65; }
+  /* ROLL button: active play from second one — tap to roll now, faster than the idle timer */
+  .rollBtn { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 5; width: 92px; height: 92px; border-radius: 50%; border: 0;
+    color: #3a2600; font: 900 19px "Trebuchet MS", sans-serif; letter-spacing: .04em; background: radial-gradient(circle at 42% 35%, #ffe79a, #ffd23f 55%, #e0a800);
+    box-shadow: 0 6px 18px rgba(0,0,0,.42), inset 0 -6px 0 rgba(0,0,0,.2); text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+  .rollBtn:active { transform: translateX(-50%) translateY(2px); }
+  .rollBtn.tap { animation: rollTap .18s ease-out; }
+  @keyframes rollTap { 50% { transform: translateX(-50%) scale(1.13); } }
+  body.boardView .rollBtn { bottom: 66px; width: 72px; height: 72px; font-size: 16px; }
   /* overlays: book / shop / bag */
   .overlay { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8,6,18,.6); pointer-events: auto; }
   .overlay.open { display: flex; }
@@ -238,6 +244,7 @@
     <div class="pNeed" id="pNeed"></div>
   </div>
   <div id="stick"><i></i></div>
+  <button class="rollBtn" id="rollBtn">ROLL</button>
   <div class="boardBar">
     <button class="bDie" data-buy="cell"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" id="barCrate" data-act="crate"></button>
     <button class="bWalk" data-act="walk">Walk away</button>
@@ -259,7 +266,7 @@
   <!-- collection book / shop / storage shelf overlays -->
   <div class="overlay" id="ovBook"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">COLLECTION <span id="bookPct"></span></div><div class="book" id="bookGrid"></div><div class="ovFoot" id="bookFoot"></div></div></div>
   <div class="overlay" id="ovShop"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">SHOP</div><div class="shop" id="shopList"></div></div></div>
-  <div class="overlay" id="ovBag"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">STORAGE <span id="bagCap"></span></div><div class="bag" id="bagGrid"></div><div class="ovFoot" id="bagFoot">Tap a die to place it on the board · tap two of a kind to merge</div></div></div>
+  <div class="overlay" id="ovBag"><div class="panel"><button class="ovClose" data-close>✕</button><div class="ovHead">STORAGE <span id="bagCap"></span></div><div class="bag" id="bagGrid"></div><div class="ovFoot" id="bagFoot"></div></div></div>
 </div>
 <script type="module">
 import * as THREE from "three";
@@ -572,7 +579,7 @@ class Board {
   async roll() {
     const epoch = ++this.epoch;                 // any newer roll makes this one a no-op at its next await
     this.busy = true; this.pending = []; this.run = 0;
-    const fast = this.rollMs < 1000;
+    const fast = this.rollMs < 1000 || this._forceFast; this._forceFast = false; // manual taps always tumble quick
     // Tumble time scales down as the interval shrinks, so a full tumble still fits before the next roll lands.
     const tsc = fast ? 1 : Math.min(1, this.rollMs / 1800);
     this.clearLinks();
@@ -758,7 +765,8 @@ const S = {
   collection: {},                      // kindId -> { level, count }
   passes: {},                          // Robux passes owned (see shop)
   cratesOpened: 0, crateRun: 0, lifetime: 0, // crateRun = crates opened this prestige run (drives crate cost); lifetime points gates the machine
-  serverLuck: 1,                       // a server-luck purchase lifts this for everyone
+  serverLuck: 1, serverLuckUntil: 0,   // a server-luck purchase lifts this for everyone, for a while
+  rollsManual: 0, goalIdx: 0,          // active play: manual-roll count + current onboarding goal
 };
 const mine = new Board(0, true);
 const theirs = new Board(70, false); theirs.rollMs = 1400;
@@ -824,6 +832,41 @@ function buy(k) {
 const secs = ms => (ms / 1000).toFixed(ms % 1000 ? (ms % 100 ? 2 : 1) : 1) + "s";
 function earn(v) { S.points += v; S.runPoints += v; S.lifetime += v; S.earned.push([now, v]); }
 const fmt = n => n < 1e4 ? Math.floor(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : n < 1e9 ? (n / 1e6).toFixed(2) + "M" : (n / 1e9).toFixed(2) + "B";
+
+// ---- active play: tap to roll now -----------------------------------------------------------------
+// The timer keeps rolling on its own for idle play; tapping ROLL (or the board) fires a roll immediately,
+// capped by a short floor so it feels like a clicker without being an autoclicker exploit. Every manual roll
+// still tumbles and plays back (compressed to fit), so placement and combos are what you're doing when active.
+// Floor between manual rolls (ms, game time): snappy but not an autoclicker. Faster-rolls upgrades also lower it,
+// so speed stays worth buying for an active tapper, not just for idle play.
+const manualFloor = () => Math.max(120, 300 - 18 * S.speedLv);
+let lastManual = -1e9;
+function manualRoll() {
+  if (now - lastManual < manualFloor()) return false;
+  lastManual = now; S.rollsManual++;
+  mine._forceFast = true; mine.next = now;             // a quick tumble this frame (banks any in-flight playback)
+  const btn = document.getElementById("rollBtn"); if (btn) { btn.classList.remove("tap"); void btn.offsetWidth; btn.classList.add("tap"); }
+  SFX.pick(); return true;
+}
+
+// ---- onboarding goals: a short chain that leads the first several minutes and pays out -------------
+const GOALS = [
+  { t: "Tap ROLL ×5",            max: 5, cur: () => S.rollsManual,                                              reward: 80 },
+  { t: "Unlock a board cell",    max: 1, cur: () => S.cells - 3,                                                reward: 120 },
+  { t: "Open your first crate",  max: 1, cur: () => S.cratesOpened,                                             reward: 150 },
+  { t: "Get a Rare die",         max: 1, cur: () => Object.keys(S.collection).some(k => +k.split(":")[0] >= 2) ? 1 : 0, reward: 300 },
+  { t: "Get 6 dice on the board",max: 6, cur: () => mine.cells.filter(Boolean).length,                          reward: 400 },
+  { t: "Better combos ×1.5",     max: 2, cur: () => S.comboLv,                                                  reward: 500 },
+  { t: "Open 5 crates",          max: 5, cur: () => S.cratesOpened,                                             reward: 800 },
+  { t: "Complete a colour set",  max: 1, cur: () => TIERS.some((_, t) => setComplete(t)) ? 1 : 0,               reward: 1500 },
+];
+function checkGoals() {
+  while (S.goalIdx < GOALS.length) {
+    const g = GOALS[S.goalIdx]; if (g.cur() < g.max) break;
+    if (g.reward) earn(g.reward); S.goalIdx++; SFX.coin();
+    announce(`<b>Goal done</b>${g.reward ? ` · +${fmt(g.reward)}` : ""}`);
+  }
+}
 
 // ================================================================ HUD helpers
 const hud = document.getElementById("hud"), totalEl = document.getElementById("total"), ptsEl = document.getElementById("pts");
@@ -927,7 +970,7 @@ async function doPrestige() {
   mine.tiles.forEach((t, i) => { const o = (N - 1) / 2, d = Math.hypot(Math.floor(i / N) - o, i % N - o);
     tween(480, e => { t.material.emissive.setHex(0xffd23f); t.material.emissiveIntensity = Math.sin(Math.PI * e) * .9; }, d * 55).then(() => t.material.emissive.setHex(0)); });
   await wait(540);
-  S.prestige = newLv; S.points = 0; S.shown = 0; S.runPoints = 0; S.earned = []; S.speedLv = 0; S.comboLv = 0; S.cells = 3; S.crateRun = 0;
+  S.prestige = newLv; S.points = 0; S.shown = 0; S.runPoints = 0; S.earned = []; S.speedLv = 0; S.comboLv = 0; S.cells = 3; S.crateRun = 0; crateReadyAt = 0;
   if (grow) {
     N = boardSizeFor(newLv);
     const colors = theirs.cells.filter(Boolean).map(d => ({ tier: d.tier, color: d.color }));
@@ -996,7 +1039,7 @@ renderer.domElement.addEventListener("pointerdown", e => {
   if (mode === "walk") { orbit = { id: e.pointerId, x: e.clientX }; return; }
   pointerRay(e);
   const meshes = mine.cells.map(d => d && d.mesh).filter(Boolean);
-  const h = !mine.tumbling && ray.intersectObjects(meshes)[0]; if (!h) return;
+  const h = !mine.tumbling && ray.intersectObjects(meshes)[0]; if (!h) { manualRoll(); return; } // tap the board (not a die) to roll now
   const from = mine.cells.findIndex(d => d && d.mesh === h.object), d = mine.cells[from];
   d.held = true; drag = { id: e.pointerId, from, d, to: from }; SFX.pick();
   renderer.domElement.setPointerCapture(e.pointerId);
@@ -1028,6 +1071,7 @@ renderer.domElement.addEventListener("pointerup", endDrag); renderer.domElement.
 // ================================================================ buttons
 document.querySelectorAll("[data-buy]").forEach(b => b.addEventListener("click", () => buy(b.dataset.buy)));
 document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
+document.getElementById("rollBtn").addEventListener("click", manualRoll);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
   if (k === "cash") { S.points += 5000; SFX.coin(); }
@@ -1048,8 +1092,7 @@ function boardCam() {
 function onResize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", onResize);
 
-// ================================================================ powers + shiny die
-// All numbers live in these two tables so power levels can slot in later without touching the logic.
+// ================================================================ powers + timed boosts
 // cd = cooldown (ms, game time), dur = how long the buff runs (ms). The stat factors (speed/points/combo)
 // are read inside stats() -> applyBuffs(); a speed factor divides rollMs (so the floor drops below 0.5s while boosted).
 const POWERS = {
@@ -1057,17 +1100,10 @@ const POWERS = {
   overclock: { name: "Overclock", color: "#3f7cf0", cd: 45000, dur: 10000, speed: 2 },
   surge:     { name: "Surge",     color: "#ffd23f", cd: 40000, dur: 8000,  points: 3 },
 };
-// Shiny die effects, with the web version's weights (sum 100).
-const SHINY_FX = [
-  { key: "gold",   name: "Gold Rush",   w: 40, color: "#ffd23f", dur: 30000, points: 7, msg: "×7 points" },
-  { key: "hot",    name: "Hot Hands",   w: 22, color: "#ff7a1f", dur: 30000, speed: 3,  msg: "×3 roll speed" },
-  { key: "warp",   name: "Time Warp",   w: 22, color: "#9fd0ff", instant: "warp" },
-  { key: "fever",  name: "Combo Fever", w: 10, color: "#9b5de5", dur: 30000, combo: 2,  msg: "combo ×2" },
-  { key: "charge", name: "Recharge",    w: 6,  color: "#2fb36b", instant: "charge" },
-];
-const SHINY_FIRST = 60000, SHINY_MIN = 120000, SHINY_MAX = 240000, SHINY_LIFE = 15000, SHINY_MIKEY_CHANCE = .5;
+// There is ONE shiny idea in v2: a shiny die VARIANT pulled from a crate (~1/750 ×luck), with a server banner.
+// v1's in-world golden "shiny die" pickup (and Mikey racing it) is gone — Mikey is just the neighbour now.
 
-// Active buffs. Each: { key, name, color, until, dur, speed?, points?, combo? }. stats() multiplies their factors in.
+// Active buffs. Each: { key, name, color, until, dur, speed?, points?, combo?, luck? }. stats() multiplies factors in.
 const buffs = [];
 function applyBuffs(s) {
   let speed = 1;
@@ -1094,62 +1130,13 @@ function usePower(k) {
   renderPowers(); return true;
 }
 
-// Shiny die: a golden, bobbing die in the world. Walk into it (or tap its marker) to claim one weighted effect.
-const shinyMat = new THREE.MeshStandardMaterial({ color: 0xffcf3f, emissive: 0xffb000, emissiveIntensity: .5, metalness: .9, roughness: .22 });
-const shiny = { mesh: null, halo: null, pos: new THREE.Vector3(), baseY: 2.4, until: 0, nextAt: SHINY_FIRST };
-const shinyMark = document.createElement("div"); shinyMark.className = "shinyMark"; shinyMark.style.display = "none";
-shinyMark.addEventListener("pointerdown", e => { e.stopPropagation(); if (shiny.mesh) claimShiny("you"); });
-hud.appendChild(shinyMark);
-function spawnShiny() {
-  const ang = Math.random() * Math.PI * 2, rad = 14 + Math.random() * 10; // on the plot, a short walk from center, clear of the board
-  shiny.pos.set(Math.cos(ang) * rad, shiny.baseY, Math.sin(ang) * rad);
-  const m = new THREE.Mesh(dieGeo, shinyMat); m.castShadow = true; m.position.copy(shiny.pos); scene.add(m); shiny.mesh = m;
-  const halo = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: .4, blending: THREE.AdditiveBlending, depthWrite: false }));
-  halo.rotation.x = -Math.PI / 2; halo.position.set(shiny.pos.x, .25, shiny.pos.z); scene.add(halo); shiny.halo = halo;
-  shiny.until = now + SHINY_LIFE; SFX.sparkle();
-  mikey.racing = theirs && Math.random() < SHINY_MIKEY_CHANCE; // Mikey sometimes races you for it
-}
-function despawnShiny() {
-  if (shiny.mesh) { scene.remove(shiny.mesh); }
-  if (shiny.halo) { scene.remove(shiny.halo); shiny.halo.geometry.dispose(); shiny.halo.material.dispose(); }
-  shiny.mesh = shiny.halo = null; shiny.nextAt = now + SHINY_MIN + Math.random() * (SHINY_MAX - SHINY_MIN); mikey.racing = false;
-  shinyMark.style.display = "none";
-}
-function pickShiny() { let r = Math.random() * SHINY_FX.reduce((t, f) => t + f.w, 0); return SHINY_FX.find(f => (r -= f.w) < 0) || SHINY_FX[0]; }
-function claimShiny(by) {
-  if (!shiny.mesh) return;
-  const fx = pickShiny(); despawnShiny();
-  if (by === "mikey") return; // Mikey got it: handled by the caller's pop
-  SFX.sparkle(); SFX.coin();
-  if (fx.instant === "warp") {
-    const rate = S.earned.reduce((a, [, v]) => a + v, 0) / 10, amt = Math.max(1, Math.round(rate * 180));
-    earn(amt); announce(`<b>TIME WARP</b> +${fmt(amt)}`);
-  } else if (fx.instant === "charge") {
-    for (const k in pstate) pstate[k] = 0; renderPowers(); announce(`<b>RECHARGE</b> powers ready`);
-  } else {
-    addBuff({ key: fx.key, name: fx.name, color: fx.color, dur: fx.dur, speed: fx.speed, points: fx.points, combo: fx.combo });
-    announce(`<b>${fx.name.toUpperCase()}</b> ${fx.msg} · ${fx.dur / 1000}s`);
-  }
-}
-
-// Mikey: a simple runner on the neighbour plot who sometimes sprints for the shiny.
+// Mikey: the neighbour. He idles on his plot (a lazy bob) and shows off his stocked board.
 const mikey = new THREE.Group();
 mikey.add(new THREE.Mesh(new THREE.CapsuleGeometry(.95, 1.7, 4, 12), std(0xef4b52)).translateY(2.1));
 mikey.add(new THREE.Mesh(new THREE.SphereGeometry(.85, 16, 12), std(0xf2c48d)).translateY(4.35));
 mikey.children.forEach(c => c.castShadow = true);
-mikey.home = new THREE.Vector3(70, .4, 22); mikey.position.copy(mikey.home); mikey.racing = false; scene.add(mikey);
-function updateMikey(dt) {
-  const target = mikey.racing && shiny.mesh ? shiny.pos : mikey.home;
-  const dx = target.x - mikey.position.x, dz = target.z - mikey.position.z, d = Math.hypot(dx, dz);
-  if (d > .1) {
-    const step = Math.min(d, 11 * dt); mikey.position.x += dx / d * step; mikey.position.z += dz / d * step;
-    mikey.rotation.y = Math.atan2(dx, dz); mikey.position.y = .4 + Math.abs(Math.sin(now / 90)) * .25;
-  } else mikey.position.y = .4;
-  if (mikey.racing && shiny.mesh && Math.hypot(shiny.pos.x - mikey.position.x, shiny.pos.z - mikey.position.z) < 2.6) {
-    const at = new THREE.Vector3(shiny.pos.x, 3, shiny.pos.z); claimShiny("mikey");
-    const el = popAt(at, "Mikey grabbed it!", "far"); if (el) setTimeout(() => el.remove(), 1100); SFX.no();
-  }
-}
+mikey.home = new THREE.Vector3(70, .4, 22); mikey.position.copy(mikey.home); scene.add(mikey);
+function updateMikey(dt) { mikey.position.y = .4 + Math.abs(Math.sin(now / 520)) * .12; mikey.rotation.y = Math.sin(now / 1400) * .4; }
 
 let chipT = 0;
 function powersFrame(dt) {
@@ -1157,31 +1144,15 @@ function powersFrame(dt) {
   let changed = false;
   for (let i = buffs.length - 1; i >= 0; i--) if (now >= buffs[i].until) { buffs.splice(i, 1); changed = true; }
   if (changed) { applyStats(); renderChips(); }
-  // shiny lifecycle
-  if (!shiny.mesh) { if (now >= shiny.nextAt) spawnShiny(); }
-  else {
-    shiny.mesh.position.y = shiny.baseY + Math.sin(now / 300) * .6; shiny.mesh.rotation.y += dt * 1.6;
-    shiny.mesh.material.emissiveIntensity = .45 + .3 * Math.sin(now / 120);
-    if (shiny.halo) shiny.halo.material.opacity = .35 + .2 * Math.sin(now / 150);
-    const left = shiny.until - now; if (left < 3000) shiny.mesh.scale.setScalar(.55 + .45 * Math.max(0, left / 3000));
-    if (mode === "walk" && Math.hypot(player.position.x - shiny.pos.x, player.position.z - shiny.pos.z) < 3.2) claimShiny("you");
-    else if (now >= shiny.until) { const el = popAt(new THREE.Vector3(shiny.pos.x, 3, shiny.pos.z), "", "far"); despawnShiny(); if (el) el.remove(); }
-  }
+  if (S.serverLuck > 1 && now >= S.serverLuckUntil) { S.serverLuck = 1; renderChips(); } // server luck lapses
   updateMikey(dt);
-  // The timer strip is a steady countdown: solid gold while a roll-speed buff runs (Overclock / Hot Hands),
-  // solid blue otherwise. No flashing while a buff is active — only the colour changes, once, on the transition.
+  // The timer strip is a steady countdown: solid gold while a roll-speed buff runs, solid blue otherwise.
   if (mine.timer) {
     const sb = buffs.some(b => b.speed);
     if (sb !== mine._speedBuff) { mine._speedBuff = sb; mine.timer.material.color.setHex(sb ? 0xffd23f : 0x5aa0ff); }
   }
   renderPowers();
-  if ((chipT -= dt) <= 0) { chipT = .1; renderChips(); updateShinyMark(); }
-}
-function updateShinyMark() {
-  if (!shiny.mesh) { shinyMark.style.display = "none"; return; }
-  const s = screenOf(shiny.mesh.position); if (!s) { shinyMark.style.display = "none"; return; }
-  const m = 20, x = Math.min(innerWidth - m, Math.max(m, s.x)), y = Math.min(innerHeight - m, Math.max(m, s.y)); // clamp to a tappable edge in board view
-  shinyMark.style.display = ""; shinyMark.style.left = x + "px"; shinyMark.style.top = y + "px";
+  if ((chipT -= dt) <= 0) { chipT = .1; renderChips(); }
 }
 function renderPowers() {
   for (const k in POWERS) {
@@ -1196,12 +1167,15 @@ const chipsEl = document.getElementById("buffs"), chipEls = new Map();
 // Chips are updated in place (not rebuilt): each buff's chip is created once so its entrance plays once and its
 // countdown + draining bar tick smoothly. Removed when the buff ends.
 function renderChips() {
-  const live = new Set(buffs.map(b => b.key));
+  // Server Luck shows as a distinct gold chip everyone on the server sees (synthetic buff, not in the buffs list).
+  const chips = buffs.slice();
+  if (S.serverLuck > 1) chips.push({ key: "__server", name: "SERVER LUCK ×2", color: "#ffd23f", until: S.serverLuckUntil, dur: SERVER_LUCK_DUR, server: true });
+  const live = new Set(chips.map(b => b.key));
   for (const [k, el] of chipEls) if (!live.has(k)) { el.remove(); chipEls.delete(k); }
-  for (const b of buffs) {
+  for (const b of chips) {
     let el = chipEls.get(b.key);
     if (!el) {
-      el = document.createElement("div"); el.className = "chip"; el.style.setProperty("--c", b.color);
+      el = document.createElement("div"); el.className = "chip" + (b.server ? " server" : ""); el.style.setProperty("--c", b.color);
       el.innerHTML = `<span class="cn"></span><b></b><i class="cbar"></i>`;
       chipsEl.appendChild(el); chipEls.set(b.key, el);
     }
@@ -1224,13 +1198,13 @@ function frame(t) {
     if (e >= 1) { tweens.splice(tweens.indexOf(tw), 1); tw.res(); }
   }
   mine.tick(); theirs.tick(); prestigeTick(dt);
-  powersFrame(dt); // powers cooldowns, buffs, shiny die, Mikey
+  powersFrame(dt); // powers cooldowns, buffs, server luck, Mikey
   // crate machine: the sample die spins and bobs; glow when affordable
   cmDie.rotation.y += dt * 1.2; cmDie.position.y = 3.6 + Math.sin(now / 500) * .18;
-  cmTop.material.emissiveIntensity = crateAvailable() && S.points >= crateCost() ? .4 + .35 * Math.sin(now / 220) : .12;
+  cmTop.material.emissiveIntensity = crateAvailable() && crateCdLeft() <= 0 && S.points >= crateCost() ? .4 + .35 * Math.sin(now / 220) : .12;
   crateTag.hidden = !(mode === "walk" && Math.hypot(player.position.x - CRATE_POS.x, player.position.z - CRATE_POS.z) < 15);
-  // auto-open pass: keep pulling whenever a crate is affordable and nothing is mid-reveal
-  if (S.passes.auto && !crateBusy && crateAvailable() && S.points >= crateCost()) openCrate(false);
+  // auto-open pass: keep pulling whenever a crate is affordable, off cooldown, and nothing is mid-reveal
+  if (S.passes.auto && !crateBusy && crateAvailable() && crateCdLeft() <= 0 && S.points >= crateCost()) openCrate(false);
   // other "players" pull rares/shinies now and then, so the server feels alive
   if (now >= nextFake) { nextFake = now + (38 + Math.random() * 46) * 1000; if (!crateBusy) fakePull(); }
 
@@ -1286,11 +1260,15 @@ function frame(t) {
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
     st("dice", `${mine.cells.filter(Boolean).length} / ${S.cells}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
     st("speed", `every ${secs(mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
+    checkGoals();
     const gn = document.getElementById("goalName"), gb = document.getElementById("goalBar"), pst = prestigeStatus();
     // Unlocking an empty cell is wasteful, so it's only a goal when a die is waiting in storage.
     const upgrades = ["cell", "combo", "speed"].filter(k => canBuy(k) && (k !== "cell" || S.storage.length));
     const goal = upgrades.sort((a, b) => COST[a]() - COST[b]())[0];
-    if (!crateAvailable()) {                 // the first stretch: everything points at opening the first crate
+    if (S.goalIdx < GOALS.length) {          // onboarding goals lead the first several minutes and pay out
+      const g = GOALS[S.goalIdx], cur = Math.min(g.cur(), g.max);
+      gn.textContent = g.t + (g.reward ? ` · +${fmt(g.reward)}` : ""); gb.style.width = Math.min(100, cur / g.max * 100) + "%";
+    } else if (!crateAvailable()) {          // the first stretch: everything points at opening the first crate
       gn.textContent = "First crate soon"; gb.style.width = Math.min(100, S.lifetime / CRATE_UNLOCK * 100) + "%";
     } else if (pst.ready) {
       gn.textContent = `Prestige → ✦${pst.to}`; gb.style.width = Math.min(100, S.runPoints / pst.need * 100) + "%";
@@ -1340,18 +1318,33 @@ Board.prototype.removeDie = function (i) {
   if (d.glow) { this.group.remove(d.glow); d.glow.material.dispose(); }
   this.cells[i] = null;
 };
-// ================================================================ dice ownership: obtain / storage / merge
+// ================================================================ dice ownership: obtain / storage / merge / forge
 const STORAGE_BASE = 12;
 const storageCap = () => S.passes.bigbag ? 24 : STORAGE_BASE;
 function addToStorage(spec) { S.storage.push({ tier: spec.tier, color: spec.color, level: spec.level | 0, shiny: !!spec.shiny }); }
-// Record a die in the collection, then place it on an empty board cell if there's room, else on the storage shelf.
+// Merge path up the ladder: two identical dice combine. Below the cap they just level up; at the cap they FORGE
+// into the next tier of the same colour (level 0). So with MERGE_CAP = 2 it takes 8 base dice of one kind to make
+// one of the next tier up (2 -> +1, two +1s -> +2, two +2s -> forge). Mythic can't forge higher, so it keeps leveling.
+const MERGE_CAP = 2;
+function mergeSpecs(a) {
+  if (a.tier < TIERS.length - 1 && (a.level | 0) >= MERGE_CAP) return { tier: a.tier + 1, color: a.color, level: 0, shiny: !!a.shiny };
+  return { tier: a.tier, color: a.color, level: (a.level | 0) + 1, shiny: !!a.shiny };
+}
+// Sell value when the shelf overflows: scales hard with rarity so a dumped Legendary still stings less than keeping it.
+const sellValue = spec => Math.round(40 * Math.pow(3, spec.tier) * (1 + .5 * (spec.level | 0)));
+// Record a die in the collection, then place it on an empty board cell; else shelf it; else (shelf full) merge or sell.
 function obtainDie(spec, opts = {}) {
   const id = kindId(spec.tier, spec.color);
   (S.collection[id] || (S.collection[id] = { count: 0 })).count++;
   applyStats(); // a newly-completed colour set changes the points multiplier
-  let placed = "storage", cell;
-  if (!opts.forceStorage) { cell = mine.emptyCell(); if (cell !== undefined) { mine.addDie(cell, spec, true); placed = "board"; } }
-  if (placed === "storage") addToStorage(spec);
+  let placed = "board", cell;
+  if (!opts.forceStorage && (cell = mine.emptyCell()) !== undefined) { mine.addDie(cell, spec, true); }
+  else if (S.storage.length < storageCap()) { addToStorage(spec); placed = "storage"; }
+  else {
+    const mi = S.storage.findIndex(d => d.tier === spec.tier && d.color === spec.color && (d.level | 0) === (spec.level | 0));
+    if (mi >= 0) { S.storage[mi] = mergeSpecs(S.storage[mi]); placed = "merged"; }      // shelf full: auto-merge a match
+    else { const v = sellValue(spec); earn(v); placed = "sold"; announce(`Shelf full — sold <b>${kindName(spec.tier, spec.color)}</b> +${fmt(v)}`); }
+  }
   updateMenuCounts();
   return { placed, cell };
 }
@@ -1363,12 +1356,15 @@ function fillBoardFromStorage() {
 }
 
 // ================================================================ crate machine + reveal (the moment)
-const CRATE_UNLOCK = 1600;                // lifetime points before the machine switches on (~3-4 minutes in)
+const CRATE_UNLOCK = 1600;                // lifetime points before the machine switches on (first crate ~30s of active play)
 const SHINY_BASE = 1 / 750;               // shiny chance per pulled die, ×luck
-let crateForce = null, crateBusy = false, crateResolve = null;
+const CRATE_CD = 60000;                   // ms (game time) cooldown between crate opens — keeps crates an EVENT, not spam,
+                                          // and stops an active earner from spam-filling the board (board-fill ~20-25 min). See sim.
+let crateForce = null, crateBusy = false, crateResolve = null, crateReadyAt = 0;
 // Crate cost climbs within a prestige run (so filling a board is an arc) but resets each prestige — see sim.
-const crateCost = () => Math.round(420 * Math.pow(1.14, S.crateRun));
+const crateCost = () => Math.round(300 * Math.pow(1.18, S.crateRun));
 const crateAvailable = () => S.lifetime >= CRATE_UNLOCK;
+const crateCdLeft = () => Math.max(0, crateReadyAt - now);
 // Weighted tier roll; luck multiplies every rare+ weight (tier 0 unchanged) so boosts push you up the ladder.
 function pickTier(l) {
   const wsum = TIERS.reduce((t, x, i) => t + x.w * (i ? l : 1), 0);
@@ -1388,8 +1384,10 @@ function openCrate(free) {
   if (crateBusy) return null;
   if (!free) {
     if (!crateAvailable()) { SFX.no(); return null; }
+    if (crateCdLeft() > 0) { SFX.no(); return null; }        // still on cooldown
     const c = crateCost(); if (S.points < c) { SFX.no(); return null; }
     S.points -= c; S.shown = Math.min(S.shown, S.points);
+    crateReadyAt = now + CRATE_CD;                           // start the next-crate cooldown
   }
   const n = S.passes.open3 ? 3 : 1, pulls = [];
   for (let k = 0; k < n; k++) pulls.push(rollOne());
@@ -1425,7 +1423,7 @@ function playCrate(pulls) {
     C("crDie").textContent = "d" + T.sides; C("crDie").className = "crDie" + (best.shiny ? " shiny" : "");
     C("crName").textContent = kindName(best.tier, best.color) + (best.shiny ? " ✦" : "");
     C("crTier").textContent = T.name + (pulls.length > 1 ? `  +${pulls.length - 1} more` : ""); C("crTier").style.color = tCol;
-    card.className = "crCard show"; hint.textContent = "tap to continue";
+    card.className = "crCard show"; hint.textContent = "";
     if (best.tier >= 4 || best.shiny) SFX.sparkle();
   }, 1320);
   setTimeout(finish, 3200);
@@ -1433,10 +1431,11 @@ function playCrate(pulls) {
 }
 function updateCrateButton() {
   const btn = C("barCrate"); if (!btn) return;
-  const ok = crateAvailable();
-  btn.innerHTML = ok ? `Open crate<small>${fmt(crateCost())}</small>` : `Crate<small>locked</small>`;
-  btn.disabled = !ok || S.points < crateCost();
-  if (crateTag) { crateTag.el.innerHTML = ok ? `Crate<small>${fmt(crateCost())}</small>` : `Crate<small>soon</small>`; crateTag.el.classList.toggle("poor", ok && S.points < crateCost()); }
+  const ok = crateAvailable(), cd = crateCdLeft();
+  const label = !ok ? `Crate<small>locked</small>` : cd > 0 ? `Crate<small>${Math.ceil(cd / 1000)}s</small>` : `Open crate<small>${fmt(crateCost())}</small>`;
+  btn.innerHTML = label; btn.disabled = !ok || cd > 0 || S.points < crateCost();
+  if (crateTag) { crateTag.el.innerHTML = !ok ? `Crate<small>soon</small>` : cd > 0 ? `Crate<small>${Math.ceil(cd / 1000)}s</small>` : `Crate<small>${fmt(crateCost())}</small>`;
+    crateTag.el.classList.toggle("poor", ok && cd <= 0 && S.points < crateCost()); }
 }
 // World crate machine on the plot (replaces v1's special-dice pad). Walk into it to open a crate.
 const CRATE_POS = { x: -18.5, z: 17 };
@@ -1471,15 +1470,23 @@ function renderBook() {
 // ================================================================ pretend Robux shop
 let luckStack = 0;
 const SHOP = [
-  { id: "luck15", icon: "🍀", name: "Luck Boost", sub: "×2 luck · 15 min · stacks", price: 49, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Luck ×2", color: "#86e29a", dur: 15 * 60000, luck: 2 }); banner(`<b>Luck Boost</b> active · ×${fmtMult(luck())} luck`); } },
-  { id: "serverLuck", icon: "🌟", name: "Server Luck", sub: "×2 luck for everyone · 15 min", price: 99, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Server Luck", color: "#ffd23f", dur: 15 * 60000, luck: 2 }); banner(`<b>You</b> bought <span class="sp">Server Luck</span> — ×2 luck for the whole server!`); } },
-  { id: "x2", icon: "✖2", name: "x2 Points", sub: "Pass · permanent", price: 199, pass: true, act() { applyStats(); banner(`<b>x2 Points</b> pass unlocked`); } },
-  { id: "auto", icon: "⚙", name: "Auto-Open Crates", sub: "Pass · opens when you can afford it", price: 149, pass: true },
-  { id: "open3", icon: "3", name: "Open 3 at Once", sub: "Pass · triple every pull", price: 179, pass: true },
-  { id: "bigbag", icon: "🎒", name: "Bigger Storage", sub: "Pass · 12 → 24 shelf slots", price: 99, pass: true },
-  { id: "vip", icon: "👑", name: "VIP Plot", sub: "Pass · golden plot look", price: 129, pass: true, act() { matMesh.material.color.setHex(0xffe27a); pads.forEach(p => p.mesh.material.emissive.setHex(0xffd23f)); } },
-  { id: "starter", icon: "🎁", name: "Starter Pack", sub: "One-time · 3,000 points + a Rare die", price: 29, once: true, act() { earn(3000); obtainDie({ tier: 2, color: CNAMES[rnd(5)], level: 0, shiny: false }); banner(`<b>Starter Pack</b> claimed`); renderStorage(); } },
+  { id: "luck15", icon: "🍀", name: "Luck Boost", sub: "×2 luck · 15 min", price: 49, act() { luckStack++; addBuff({ key: "luck" + luckStack, name: "Luck ×2", color: "#86e29a", dur: 15 * 60000, luck: 2 }); banner(`<b>Luck Boost</b> active · ×${fmtMult(luck())} luck`); } },
+  { id: "serverLuck", icon: "🌟", name: "Server Luck", sub: "×2 luck · whole server · 15 min", price: 99, act() { buyServerLuck(); } },
+  { id: "x2", icon: "✖2", name: "x2 Points", sub: "Pass", price: 199, pass: true, act() { applyStats(); banner(`<b>x2 Points</b> pass unlocked`); } },
+  { id: "auto", icon: "⚙", name: "Auto-Open Crates", sub: "Pass", price: 149, pass: true },
+  { id: "open3", icon: "3", name: "Open 3 at Once", sub: "Pass · ×3 dice per crate", price: 179, pass: true },
+  { id: "bigbag", icon: "🎒", name: "Bigger Storage", sub: "Pass · 12 → 24", price: 99, pass: true },
+  { id: "vip", icon: "👑", name: "VIP Plot", sub: "Pass", price: 129, pass: true, act() { matMesh.material.color.setHex(0xffe27a); pads.forEach(p => p.mesh.material.emissive.setHex(0xffd23f)); } },
+  { id: "starter", icon: "🎁", name: "Starter Pack", sub: "3,000 points + Rare die", price: 29, once: true, act() { earn(3000); obtainDie({ tier: 2, color: CNAMES[rnd(5)], level: 0, shiny: false }); banner(`<b>Starter Pack</b> claimed`); renderStorage(); } },
 ];
+// Server Luck is distinct from the personal boost: it runs server-wide (a persistent gold chip everyone sees),
+// lasts longer (25 min), and stacks on top of personal Luck Boosts.
+const SERVER_LUCK_DUR = 25 * 60000;
+function buyServerLuck() {
+  S.serverLuck = 2; S.serverLuckUntil = now + SERVER_LUCK_DUR;
+  banner(`<b>You</b> bought <span class="sp">SERVER LUCK</span> — ×2 luck for the whole server · 25 min!`);
+  renderChips();
+}
 function openShop() { renderShop(); C("ovShop").classList.add("open"); SFX.pick(); }
 function renderShop() {
   const list = C("shopList"); list.innerHTML = "";
@@ -1524,10 +1531,13 @@ function bagClick(i) {
   if (bagSel === i) { placeFromStorage(i); bagSel = null; renderBag(); return; }
   if (bagSel != null) {
     const s = S.storage[bagSel];
-    if (s && s.tier === d.tier && s.color === d.color && (s.level | 0) === (d.level | 0)) { // merge a matching pair → one level up
-      const keep = Math.min(bagSel, i), drop = Math.max(bagSel, i);
-      S.storage[keep] = { ...d, level: (d.level | 0) + 1 }; S.storage.splice(drop, 1);
-      bagSel = null; SFX.sparkle(); announce(`Merged → <b>${kindName(d.tier, d.color)} +${(d.level | 0) + 1}</b>`); renderBag(); updateMenuCounts(); return;
+    if (s && s.tier === d.tier && s.color === d.color && (s.level | 0) === (d.level | 0)) { // merge a matching pair
+      const keep = Math.min(bagSel, i), drop = Math.max(bagSel, i), merged = mergeSpecs(d);
+      S.storage[keep] = merged; S.storage.splice(drop, 1); S.collection[kindId(merged.tier, merged.color)] || (S.collection[kindId(merged.tier, merged.color)] = { count: 0 }).count++;
+      bagSel = null; SFX.sparkle(); applyStats();
+      if (merged.tier !== d.tier) { announce(`FORGED → <b>${kindName(merged.tier, merged.color)}</b>!`); banner(`<b>You</b> forged a <b>${kindName(merged.tier, merged.color)}</b>`); }
+      else announce(`Merged → <b>${kindName(merged.tier, merged.color)} +${merged.level}</b>`);
+      renderBag(); updateMenuCounts(); return;
     }
   }
   bagSel = i; SFX.pick(); renderBag();
@@ -1569,10 +1579,11 @@ window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy,
   // crates
   openCrate, crateCost, crateAvailable, pickTier, setCrateForce: f => { crateForce = f; },
   // storage / collection / shop
-  renderStorage, openCollection, openShop, buyShopItem, SHOP, collectionMult, luck,
-  // powers + world shiny
-  POWERS, SHINY_FX, buffs, pstate, usePower, addBuff, stats,
-  spawnShiny, claimShiny, shiny, mikey, pickShiny,
+  renderStorage, openCollection, openShop, openBag, buyShopItem, SHOP, collectionMult, luck, sellValue, mergeSpecs,
+  // active play + goals
+  manualRoll, GOALS, get goalIdx() { return S.goalIdx; },
+  // powers
+  POWERS, buffs, pstate, usePower, addBuff, stats, mikey,
   // prestige
   doPrestige, prestigeStatus, get N() { return N; }, addRun: v => earn(v) }; // test hook
 </script>

@@ -23,6 +23,7 @@ const COLORS = 5;
 const dieMult = (tier, level) => TIERS[tier].mult * (1 + .5 * (level || 0));
 function faceSet(sides) { if (sides === 6) return [3, 4, 1, 6, 2, 5]; const o = []; for (let i = 0; i < 6; i++) o.push(Math.round(1 + i * (sides - 1) / 5)); return o; }
 const rollFloor = p => Math.max(220, 500 - 60 * p);
+const manualFloor = s => Math.max(120, 300 - 18 * s.speedLv); // active-tap interval; faster-rolls lowers it
 const comboCap = p => 5 + p;
 const boardSizeFor = p => Math.min(7, 5 + (p >= 2 ? 2 : p >= 1 ? 1 : 0));
 const COST = {
@@ -30,10 +31,11 @@ const COST = {
   combo: s => Math.round(260 * Math.pow(1.42, s.comboLv)),
   speed: s => Math.round(300 * Math.pow(1.5, s.speedLv)),
 };
-const CRATE_UNLOCK = 1600, SHINY_BASE = 1 / 750;
-// Crate cost climbs within a prestige run (so filling a board is an arc, not instant) but resets each prestige —
-// prestige keeps your collection, so a fresh run refills from the shelf and the chase accelerates over days.
-const crateCost = s => Math.round(420 * Math.pow(1.14, s.crateRun));
+const CRATE_UNLOCK = 1600, SHINY_BASE = 1 / 750, CRATE_CD = 60; // seconds between crate opens
+// A crate cooldown (not just cost) is what keeps crates an EVENT and stops an active earner from spam-filling the
+// board in minutes — board-fill is paced by ~CRATE_CD × (dice needed), not by how fast you can earn.
+// Crate cost still climbs within a prestige run (a per-run arc) and resets each prestige.
+const crateCost = s => Math.round(300 * Math.pow(1.18, s.crateRun));
 const levelThreshold = lv => 60000 * Math.pow(2.9, lv);
 const rollMsOf = s => Math.max(rollFloor(s.prestige), Math.round(2000 * Math.pow(.9, s.speedLv)));
 const comboOf = s => Math.min(comboCap(s.prestige), 1 + .25 * s.comboLv);
@@ -77,7 +79,7 @@ function fresh() { return { points: 0, lifetime: 0, runPoints: 0, cells: 3, comb
   board: [{ tier: 0, color: 0 }, { tier: 0, color: 1 }, { tier: 0, color: 2 }], storage: [], collection: new Set(["0:0", "0:1", "0:2"]) }; }
 // Prestige: keep every die + the collection, reset the run (points, upgrades, cells, crate-run cost), grow the board.
 function doPrestige(s) {
-  s.prestige++; s.points = 0; s.runPoints = 0; s.comboLv = 0; s.speedLv = 0; s.cells = 3; s.crateRun = 0;
+  s.prestige++; s.points = 0; s.runPoints = 0; s.comboLv = 0; s.speedLv = 0; s.cells = 3; s.crateRun = 0; s.crateReadyAt = 0;
   const all = [...s.board, ...s.storage]; all.sort((a, b) => dieMult(b.tier, b.level) - dieMult(a.tier, a.level));
   s.board = all.slice(0, s.cells); s.storage = all.slice(s.cells);
 }
@@ -99,24 +101,27 @@ function openCrate(s, luck) {
 // One spending pass. Policy: the crate is the chase — buy it whenever it's available and affordable. Unlock a cell
 // only when a die is waiting for it (storage non-empty) — filling an empty board is never the cheap first move.
 // Spare points go to combos then speed, alternating, so scoring keeps pace with the growing collection.
-function spend(s, luck) {
+function spend(s, luck, gt) {
   for (;;) {
     let acted = false;
-    if (s.lifetime >= CRATE_UNLOCK && s.points >= crateCost(s)) { openCrate(s, luck); acted = true; continue; }
-    if (s.storage.length && s.cells < maxCells(s) && s.points >= COST.cell(s)) { s.points -= COST.cell(s); s.cells++; s.board.push(s.storage.shift()); acted = true; continue; }
+    if (s.lifetime >= CRATE_UNLOCK && gt >= (s.crateReadyAt || 0) && s.points >= crateCost(s)) { openCrate(s, luck); s.crateReadyAt = gt + CRATE_CD; s.everSpent = true; acted = true; continue; }
+    if (s.storage.length && s.cells < maxCells(s) && s.points >= COST.cell(s)) { s.points -= COST.cell(s); s.cells++; s.board.push(s.storage.shift()); s.everSpent = true; acted = true; continue; }
     const canCombo = comboOf(s) < comboCap(s.prestige), canSpeed = rollMsOf(s) > rollFloor(s.prestige);
     const cCombo = COST.combo(s), cSpeed = COST.speed(s);
     // only spend on upgrades if we're not saving toward a crate we can almost afford
     const savingForCrate = s.lifetime >= CRATE_UNLOCK && s.points < crateCost(s) && s.points > crateCost(s) * .5;
     if (!savingForCrate) {
-      if (canCombo && s.points >= cCombo && (s.comboLv <= s.speedLv || !canSpeed)) { s.points -= cCombo; s.comboLv++; acted = true; continue; }
-      if (canSpeed && s.points >= cSpeed) { s.points -= cSpeed; s.speedLv++; acted = true; continue; }
+      if (canCombo && s.points >= cCombo && (s.comboLv <= s.speedLv || !canSpeed)) { s.points -= cCombo; s.comboLv++; s.everSpent = true; acted = true; continue; }
+      if (canSpeed && s.points >= cSpeed) { s.points -= cSpeed; s.speedLv++; s.everSpent = true; acted = true; continue; }
     }
     if (!acted) return;
   }
 }
 
-function run(label, buyer) {
+// opts: { active } — active = a present player tapping ROLL (interval = manual floor); idle = the timer only.
+//       { buyer }  — re-ups a 15-min ×2 Luck Boost whenever it lapses.
+function run(label, opts = {}) {
+  const { active, buyer } = opts;
   const s = fresh(); let gt = 0, luckUntil = 0;
   const marks = {};
   const mark = (k, extra) => { if (marks[k] === undefined) { marks[k] = gt; if (extra !== undefined) marks[k + "_x"] = extra; } };
@@ -125,9 +130,10 @@ function run(label, buyer) {
   for (let step = 0; step < 50_000_000; step++) {
     const luck = buyer && gt < luckUntil ? 2 : 1;
     if (buyer && gt >= luckUntil) luckUntil = gt + 15 * 60; // re-up the 15-min boost the moment it lapses
-    const ms = rollMsOf(s); gt += ms / 1000;
+    const ms = active ? manualFloor(s) : rollMsOf(s); gt += ms / 1000;
     const gained = avgScore(s); s.points += gained; s.lifetime += gained; s.runPoints += gained;
-    spend(s, luck);
+    spend(s, luck, gt);
+    if (s.everSpent) mark("firstBuy");
     if (s.cratesOpened >= 1) mark("firstCrate");
     if ([...s.collection].some(k => +k.split(":")[0] >= 2)) mark("firstRare");
     if ([...s.collection].some(k => +k.split(":")[0] >= 3)) mark("firstEpic");
@@ -143,6 +149,7 @@ function run(label, buyer) {
   const fmtT = sec => sec == null ? "—" : sec < 3600 ? `${Math.floor(sec / 60)}m${String(Math.floor(sec % 60)).padStart(2, "0")}s`
     : sec < 86400 ? `${(sec / 3600).toFixed(1)}h` : `${(sec / 86400).toFixed(1)}d`;
   console.log(`\n== ${label} ==`);
+  console.log(`  first purchase       ${fmtT(marks.firstBuy)}`);
   console.log(`  first crate          ${fmtT(marks.firstCrate)}`);
   console.log(`  first Rare die       ${fmtT(marks.firstRare)}`);
   console.log(`  first Epic die       ${fmtT(marks.firstEpic)}`);
@@ -153,6 +160,7 @@ function run(label, buyer) {
   console.log(`  crates opened        ${s.cratesOpened}   top tier ${["Common","Uncommon","Rare","Epic","Legendary","Mythic"][topTier()]}`);
 }
 
-run("free player (luck ×1)", false);
-run("buyer (Luck Boost ×2)", true);
+run("ACTIVE free player (tapping ROLL)", { active: true });
+run("IDLE free player (timer only)", {});
+run("ACTIVE buyer (tapping + Luck Boost ×2)", { active: true, buyer: true });
 console.log("");
