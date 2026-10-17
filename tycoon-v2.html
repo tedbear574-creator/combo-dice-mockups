@@ -1286,13 +1286,18 @@ function frame(t) {
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
     st("dice", `${mine.cells.filter(Boolean).length} / ${S.cells}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
     st("speed", `every ${secs(mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
-    const goal = ["cell", "combo", "speed"].filter(canBuy).sort((a, b) => COST[a]() - COST[b]())[0], pst = prestigeStatus();
-    if (pst.ready || !goal) { // everything bought, or the next prestige is the best move → point at prestige
-      document.getElementById("goalName").textContent = `Prestige → ✦${pst.to}`;
-      document.getElementById("goalBar").style.width = Math.min(100, S.runPoints / pst.need * 100) + "%";
+    const gn = document.getElementById("goalName"), gb = document.getElementById("goalBar"), pst = prestigeStatus();
+    // Unlocking an empty cell is wasteful, so it's only a goal when a die is waiting in storage.
+    const upgrades = ["cell", "combo", "speed"].filter(k => canBuy(k) && (k !== "cell" || S.storage.length));
+    const goal = upgrades.sort((a, b) => COST[a]() - COST[b]())[0];
+    if (!crateAvailable()) {                 // the first stretch: everything points at opening the first crate
+      gn.textContent = "First crate soon"; gb.style.width = Math.min(100, S.lifetime / CRATE_UNLOCK * 100) + "%";
+    } else if (pst.ready) {
+      gn.textContent = `Prestige → ✦${pst.to}`; gb.style.width = Math.min(100, S.runPoints / pst.need * 100) + "%";
+    } else if (S.points < crateCost() * 1.1 || !goal) { // nudge toward the next crate pull
+      gn.textContent = `Open crate · ${fmt(crateCost())}`; gb.style.width = Math.min(100, S.points / crateCost() * 100) + "%";
     } else {
-      document.getElementById("goalName").textContent = `${NAMES[goal]} · ${fmt(COST[goal]())}`;
-      document.getElementById("goalBar").style.width = Math.min(100, S.points / COST[goal]() * 100) + "%";
+      gn.textContent = `${NAMES[goal]} · ${fmt(COST[goal]())}`; gb.style.width = Math.min(100, S.points / COST[goal]() * 100) + "%";
     }
   }
   renderer.render(scene, camera);
