@@ -206,6 +206,8 @@ const rnd = n => Math.floor(Math.random() * n);
 
 // ================================================================ tweens
 let now = performance.now();
+// ?speed=N runs game time N times faster (rolls, timers, animations); walking stays real-time.
+const SPEED = Math.max(.1, +new URLSearchParams(location.search).get("speed") || 1);
 const tweens = [];
 function tween(dur, fn, delay = 0) { return new Promise(res => tweens.push({ t0: now + delay, dur: Math.max(1, dur), fn, res })); }
 const wait = ms => tween(ms, () => {});
@@ -235,7 +237,7 @@ class Board {
     }
     this.cells = Array(N * N).fill(null);
     this.links = new THREE.Group(); this.group.add(this.links);
-    this.busy = false; this.next = now + 1200; this.rollMs = 2000; this.combo = 1;
+    this.busy = false; this.next = now + 1200; this.rollMs = 2000; this.combo = 1; this.pointsMult = 1;
   }
   cellPos(i) { return new THREE.Vector3((i % N - 2) * CELL, TOP + DIE / 2, (Math.floor(i / N) - 2) * CELL); }
   world(i, dy = 0) { return this.cellPos(i).add(this.group.position).add(new THREE.Vector3(0, dy, 0)); }
@@ -286,7 +288,8 @@ class Board {
     const groups = colorGroups.filter(g => g.length > 1).map(cells => ({ kind: "color", color: live(cells[0]).color, cells, sum: sumOf(cells), mult: mult(cells.length), links: linksOf(cells) }));
     const chains = flood((x, y) => x.face === y.face).filter(g => g.length > 1)
       .map(cells => ({ kind: "chain", n: live(cells[0]).face, cells, sum: sumOf(cells), mult: mult(cells.length), links: linksOf(cells).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
-    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult);
+    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult);
+    if (loose.length) steps[0].pts = Math.round(steps[0].sum * this.pointsMult);
     const byPts = (x, y) => x.pts - y.pts;
     steps.push(...groups.sort(byPts), ...chains.sort(byPts));
     return { steps, total: steps.reduce((t, g) => t + g.pts, 0), dice: [...this.cells] };
@@ -428,23 +431,33 @@ for (let k = 0; k < 21; k++) theirs.addDie(theirs.emptyCell(), CNAMES[[0, 0, 1, 
 
 // ================================================================ economy
 const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0 };
+// Every rule that sets the roll interval, combo bonus or points multiplier adds its factor here; applyStats() pushes
+// the result onto the board. pointsMult multiplies each scored group's points.
+function stats() {
+  return {
+    rollMs: Math.max(500, Math.round(2000 * Math.pow(.9, S.speedLv))),
+    combo: Math.min(5, 1 + .25 * S.comboLv),
+    pointsMult: 1,
+  };
+}
+function applyStats() { const s = stats(); mine.rollMs = s.rollMs; mine.combo = s.combo; mine.pointsMult = s.pointsMult; return s; }
 const COST = {
   die: () => Math.round(25 * Math.pow(1.35, S.bought)),
   combo: () => Math.round(150 * Math.pow(1.5, S.comboLv)),
   speed: () => Math.round(100 * Math.pow(1.5, S.speedLv)),
 };
 const NAMES = { die: "Buy die", combo: "Better combos", speed: "Faster rolls" };
-const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || mine.rollMs > 500) && (k !== "combo" || mine.combo < 5);
+const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || stats().rollMs > 500) && (k !== "combo" || stats().combo < 5);
 function buy(k) {
   if (!canBuy(k) || S.points < COST[k]()) { SFX.no(); return false; }
   S.points -= COST[k](); S.shown = Math.min(S.shown, S.points); SFX.buy();
   if (k === "die") { S.bought++; mine.addDie(mine.emptyCell(), CNAMES[rnd(5)], true); flashStat("dice"); }
   if (k === "speed") {
-    const was = mine.rollMs; S.speedLv++; mine.rollMs = Math.max(500, Math.round(2000 * Math.pow(.9, S.speedLv)));
+    const was = mine.rollMs; S.speedLv++; applyStats();
     mine.speedFx(); SFX.rev(); flashStat("speed"); announce(`Rolls every ${secs(was)} → <b>${secs(mine.rollMs)}</b>`);
   }
   if (k === "combo") {
-    const was = mine.combo; S.comboLv++; mine.combo = Math.min(5, 1 + .25 * S.comboLv);
+    const was = mine.combo; S.comboLv++; applyStats();
     mine.comboFx(); SFX.sparkle(); flashStat("combo"); announce(`Each extra die in a group: +${fmtMult(was)}× → <b>+${fmtMult(mine.combo)}×</b>`);
   }
   return true;
@@ -567,7 +580,7 @@ document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
   if (k === "cash") { S.points += 1000; SFX.coin(); }
-  if (k === "fast") { const on = mine.rollMs > 500; mine.rollMs = on ? 500 : Math.max(500, Math.round(2000 * Math.pow(.9, S.speedLv))); b.classList.toggle("on", on); }
+  if (k === "fast") { const on = mine.rollMs > 500; if (on) mine.rollMs = 500; else applyStats(); b.classList.toggle("on", on); }
   if (k === "fill") { let i; while ((i = mine.emptyCell()) !== undefined) mine.addDie(i, CNAMES[rnd(5)], true); }
   if (k === "sound") { AC.on = !AC.on; b.classList.toggle("on", AC.on); }
 }));
@@ -588,7 +601,7 @@ addEventListener("resize", onResize);
 let last = performance.now(), hudT = 0;
 function frame(t) {
   requestAnimationFrame(frame);
-  const dt = Math.min(.05, (t - last) / 1000); last = t; now = t;
+  const dt = Math.min(.05, (t - last) / 1000); now += (t - last) * SPEED; last = t;
   for (const tw of tweens.slice()) {
     if (now < tw.t0) continue; const e = Math.min(1, (now - tw.t0) / tw.dur);
     try { tw.fn(e); } catch (err) { console.error(err); tweens.splice(tweens.indexOf(tw), 1); tw.res(); continue; }
