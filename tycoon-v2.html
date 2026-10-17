@@ -184,6 +184,17 @@
     box-shadow: 0 6px 18px rgba(0,0,0,.42), inset 0 -6px 0 rgba(0,0,0,.2); text-shadow: 0 1px 0 rgba(255,255,255,.4); }
   .rollBtn:active { transform: translateX(-50%) translateY(2px); }
   .rollBtn.tap { animation: rollTap .18s ease-out; }
+  /* Heat: gold -> orange -> red as the tap pace rises; a ring fills with the earned roll rate. */
+  .rollBtn { --heat: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+    background: radial-gradient(circle at 42% 35%, hsl(calc(48 - 44 * var(--heat)), 100%, calc(80% - 14% * var(--heat))), hsl(calc(46 - 42 * var(--heat)), 100%, 55%) 55%, hsl(calc(44 - 40 * var(--heat)), 100%, calc(44% - 8% * var(--heat))));
+    box-shadow: 0 6px 18px rgba(0,0,0,.42), inset 0 -6px 0 rgba(0,0,0,.2), 0 0 calc(34px * var(--heat)) hsla(calc(40 - 36 * var(--heat)), 100%, 55%, calc(.95 * var(--heat))); }
+  .rollBtn small { font-size: 12px; min-height: 13px; margin-top: 2px; opacity: .85; }
+  .rollBtn .heatRing { position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(hsl(calc(40 - 36 * var(--heat)), 100%, 58%) calc(var(--heat) * 360deg), rgba(255,255,255,.12) 0);
+    -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%); mask: radial-gradient(circle, transparent 62%, #000 64%); }
+  .rollBtn.hot { color: #fff; text-shadow: 0 1px 2px rgba(80,0,0,.6); }
+  .rollBtn.hot .heatRing { animation: heatFlick .22s ease-in-out infinite alternate; }
+  @keyframes heatFlick { to { inset: -9px; opacity: .8; } }
   @keyframes rollTap { 50% { transform: translateX(-50%) scale(1.13); } }
   body.boardView .rollBtn { left: 20px; bottom: 20px; transform: none; width: 80px; height: 80px; font-size: 17px; }
   body.boardView .rollBtn:active { transform: translateY(2px); }
@@ -227,7 +238,7 @@
     <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="luck"><span>Luck</span><b></b></div></div>
   <div class="sheet"><h4>LAST ROLL</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
   <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
-  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button></div>
+  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll mode</button></div>
   <!-- menu: open the collection book, shop and storage shelf (both views) -->
   <div class="menu" id="menu">
     <button data-menu="shop" class="mShop">R$</button>
@@ -245,7 +256,7 @@
     <div class="pNeed" id="pNeed"></div>
   </div>
   <div id="stick"><i></i></div>
-  <button class="rollBtn" id="rollBtn">ROLL</button>
+  <button class="rollBtn" id="rollBtn"><span>ROLL</span><small></small><i class="heatRing"></i></button>
   <div class="boardBar">
     <button class="bDie" data-buy="cell"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" id="barCrate" data-act="crate"></button>
     <button class="bWalk" data-act="walk">Walk away</button>
@@ -253,7 +264,6 @@
   <!-- powers + shiny: buff chips under the total; power buttons bottom-right (clear of the stick and buy bar) -->
   <div class="buffs" id="buffs"></div>
   <div class="powers" id="powers">
-    <button data-power="reroll" style="--pc:#2fb36b"><span class="pn">Reroll</span><span class="sweep"></span><span class="num"></span></button>
     <button data-power="overclock" style="--pc:#3f7cf0"><span class="pn">Over<br>clock</span><span class="sweep"></span><span class="num"></span></button>
     <button data-power="surge" style="--pc:#ffd23f"><span class="pn">Surge</span><span class="sweep"></span><span class="num"></span></button>
   </div>
@@ -436,6 +446,9 @@ function dieMaterials(spec) {
 let now = performance.now();
 // ?speed=N runs game time N times faster (rolls, timers, animations); walking stays real-time.
 const SPEED = Math.max(.1, +new URLSearchParams(location.search).get("speed") || 1);
+// ?roll=fill: playtest variant. The board scores only once every die has rolled; ROLL rolls the next unrolled die
+// and the timer rolls them one at a time. Default (?roll=all): every roll tumbles the whole board and scores it.
+const FILL = new URLSearchParams(location.search).get("roll") === "fill";
 const tweens = [];
 function tween(dur, fn, delay = 0) { return new Promise(res => tweens.push({ t0: now + delay, dur: Math.max(1, dur), fn, res })); }
 const wait = ms => tween(ms, () => {});
@@ -529,6 +542,7 @@ class Board {
     mesh.quaternion.copy(upQuatSlot(idx, rnd(4)));
     const p = this.cellPos(i); mesh.position.copy(p); this.group.add(mesh); this.cells[i] = d;
     if (d.shiny) this.decorateShiny(d);
+    if (FILL && this.mine) this.setLit(d, false);
     if (drop) {
       mesh.position.y = p.y + 28;
       tween(520, e => { mesh.position.y = p.y + 28 * (1 - e * e); }).then(() => {
@@ -598,9 +612,12 @@ class Board {
       }, fast ? 0 : Math.random() * 110 * tsc).then(() => { if (this.mine && !fast && landed++ < 5) SFX.land(.35 - landed * .04); });
     }).filter(Boolean);
     if (this.mine && !fast) SFX.rattle();
+    const res = this.score();                   // faces are decided at the throw, so the score is known now
     this.tumbling = true; await Promise.all(jobs); this.tumbling = false;
-    if (this.epoch !== epoch) return;           // a newer roll started while we tumbled
-    const res = this.score();
+    if (this.epoch !== epoch) {                 // a newer roll started while we tumbled: bank this one, no playback
+      if (this.mine) { S.best = Math.max(S.best, res.total); earn(res.total); }
+      return;
+    }
     if (this.mine) { S.best = Math.max(S.best, res.total); sheetStart(); }
     if (!this.mine) { res.steps.forEach(st => this.highlight(st)); farPop(this.group.position.clone().add(new THREE.Vector3(0, 9, 0)), "+" + fmt(res.total)); this.busy = false; }
     else if (fast) {
@@ -609,6 +626,58 @@ class Board {
       this.busy = false;
     } else { await this.playScore(res, epoch); if (this.epoch === epoch) this.busy = false; }
   }
+  // ROLL tap (whole-board mode): roll now without touching the timer, so the time already waited still counts.
+  tapRoll() { if (this.busy) this.finishPlayback(); this._forceFast = true; this.roll(); }
+
+  // ---- fill mode (?roll=fill) ------------------------------------------------------------------------
+  // Dice that haven't rolled this board sit dimmed; each roll lights one. When every die is lit the board flashes
+  // and scores. Tapping during the playback banks it and starts the next board.
+  dieMs() { return this.rollMs / 4; }            // the timer's pace per die; a full board also waits for its playback
+  setLit(d, on) { for (const m of d.mesh.material) m.color.setScalar(on ? 1 : .3); }
+  fillReset() { this.fillDone = false; this.clearLinks(); for (const d of this.cells) if (d) { d.rolled = false; this.setLit(d, false); } }
+  fillStep() {
+    if (this.busy) { this.finishPlayback(); ++this.epoch; }
+    if (this.fillDone) this.fillReset();
+    const i = this.cells.findIndex(d => d && !d.rolled && !d.held);
+    if (i < 0) return false;
+    this.rollOne(i); return true;
+  }
+  rollOne(i) {
+    const d = this.cells[i]; d.rolled = true;
+    const idx = rnd(6), q0 = d.mesh.quaternion.clone(), q1 = upQuatSlot(idx, rnd(4)), p = this.cellPos(i); d.faceIdx = idx; d.face = d.faceVals[idx];
+    const axis = new THREE.Vector3(Math.random() - .5, 0, Math.random() - .5).normalize();
+    this._tum = (this._tum || 0) + 1; this.tumbling = true;
+    SFX.pick();
+    tween(340, e => {
+      const c = this.cells.indexOf(d), at = c >= 0 ? this.cellPos(c) : p;   // follows the die if it is swapped mid-air
+      d.mesh.position.set(at.x, at.y + Math.sin(Math.PI * e) * 2, at.z);
+      d.mesh.quaternion.copy(q0.clone().slerp(q1, easeOut(e)).premultiply(new THREE.Quaternion().setFromAxisAngle(axis, (1 - easeOut(e)) * Math.PI * 2)));
+    }).then(() => {
+      this.tumbling = --this._tum > 0;
+      this.setLit(d, true); SFX.land(.22);
+      tween(180, e => d.mesh.scale.setScalar(d.base * (1 + .14 * Math.sin(Math.PI * e))));
+      if (!this.fillDone && !this._tum && this.cells.every(x => !x || x.rolled)) this.fillScore();
+    });
+  }
+  async fillScore() {
+    this.fillDone = true;
+    const epoch = ++this.epoch;
+    const res = this.score();
+    // Until the playback takes over, the whole board is one pending entry, so a tap during the flash banks it.
+    this.busy = true; this.pending = [{ pts: res.total, done: false, el: null }]; this.run = 0;
+    // The full board flashes before it scores.
+    this.cells.forEach((d, k) => { if (d) tween(260, e => { for (const m of d.mesh.material) m.color.setScalar(1 + .6 * Math.sin(Math.PI * e)); }, (k % N + Math.floor(k / N)) * 25); });
+    for (let k = 0; k < N * N; k++) if (this.cells[k]) { const m = this.tiles[k].material; tween(300, e => { m.emissive.setHex(0xffe27a); m.emissiveIntensity = Math.sin(Math.PI * e) * .5; }); }
+    SFX.rev();
+    await wait(300);
+    if (this.epoch !== epoch) return;
+    this.pending = [];
+    S.best = Math.max(S.best, res.total); sheetStart();
+    this.next = now + 1500;                     // the timer resumes after a short playback (taps cut it shorter)
+    await this.playScore(res, epoch);
+    if (this.epoch === epoch) { this.busy = false; this.next = now + this.dieMs(); }
+  }
+
   // A step's floating "sum ×multiplier" pop over the board. Reused by the paced and collapsed playbacks.
   groupPop(st) {
     const hex = stepHex(st);
@@ -727,8 +796,19 @@ class Board {
     tween(500, e => this.timer.material.color.setHex(Math.floor(e * 6) % 2 ? 0xffffff : 0x5aa0ff)).then(() => this.timer.material.color.setHex(0x5aa0ff));
   }
   tick() {
-    if (now >= this.next) { this.next = now + this.rollMs; if (this.busy) this.finishPlayback(); this.roll(); }
-    if (this.timer) { const p = Math.min(1, Math.max(0, 1 - (this.next - now) / this.rollMs)); this.timer.scale.x = Math.max(.001, p); this.timer.position.x = -this.timerL / 2 * (1 - p); }
+    let p;
+    if (FILL && this.mine) {
+      // The timer rolls one die per dieMs, and waits while a full board's playback runs.
+      if (now >= this.next && !this.busy) { this.next = now + this.dieMs(); this.fillStep(); }
+      // Strip = how much of the board has rolled, plus the share of the die the timer is working on.
+      const dice = this.cells.filter(Boolean), done = this.fillDone ? dice.length : dice.filter(d => d.rolled).length;
+      const part = this.busy ? 0 : Math.min(1, Math.max(0, 1 - (this.next - now) / this.dieMs()));
+      p = dice.length ? Math.min(1, (done + (done < dice.length ? part : 0)) / dice.length) : 0;
+    } else {
+      if (now >= this.next) { this.next = now + this.rollMs; if (this.busy) this.finishPlayback(); this.roll(); }
+      p = Math.min(1, Math.max(0, 1 - (this.next - now) / this.rollMs));
+    }
+    if (this.timer) { this.timer.scale.x = Math.max(.001, p); this.timer.position.x = -this.timerL / 2 * (1 - p); }
     this.updateDecos();
   }
 }
@@ -835,20 +915,42 @@ const secs = ms => (ms / 1000).toFixed(ms % 1000 ? (ms % 100 ? 2 : 1) : 1) + "s"
 function earn(v) { S.points += v; S.runPoints += v; S.lifetime += v; S.earned.push([now, v]); }
 const fmt = n => n < 1e4 ? Math.floor(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : n < 1e9 ? (n / 1e6).toFixed(2) + "M" : (n / 1e9).toFixed(2) + "B";
 
-// ---- active play: tap to roll now -----------------------------------------------------------------
-// The timer keeps rolling on its own for idle play; tapping ROLL (or the board) fires a roll immediately,
-// capped by a short floor so it feels like a clicker without being an autoclicker exploit. Every manual roll
-// still tumbles and plays back (compressed to fit), so placement and combos are what you're doing when active.
-// Floor between manual rolls (ms, game time): snappy but not an autoclicker. Faster-rolls upgrades also lower it,
-// so speed stays worth buying for an active tapper, not just for idle play.
-const manualFloor = () => Math.max(120, 300 - 18 * S.speedLv);
-let lastManual = -1e9;
+// ---- active play: tap to roll ----------------------------------------------------------------------
+// The timer keeps rolling on its own for idle play; tapping ROLL (or the board) earns rolls on top. Taps feed a
+// roll bank: up to 3 taps/s every tap is one roll; faster tapping still pays, with diminishing returns (6 taps/s
+// gives 4 rolls/s, 10 gives 5), so nobody has to mash to get most of it. Rates are wall-clock: they track the
+// player's hand, not ?speed. Faster-rolls upgrades and roll-speed buffs (Overclock) scale the whole curve.
+const TAP_CURVE = [[0, 0], [3, 3], [6, 4], [10, 5]];   // taps in the last second -> rolls per second
+const tapRate = c => { for (let k = 1; k < TAP_CURVE.length; k++) { const [x0, y0] = TAP_CURVE[k - 1], [x1, y1] = TAP_CURVE[k];
+  if (c <= x1) return y0 + (y1 - y0) * (c - x0) / (x1 - x0); } return TAP_CURVE[TAP_CURVE.length - 1][1]; };
+const tapBoost = () => (1 + .06 * S.speedLv) * buffs.reduce((m, b) => m * (b.speed || 1), 1);
+const TAP_GAP = 110;                                   // ms between tap rolls, so tumbles stay readable
+const taps = []; let rollBank = 0, lastTapRoll = -1e9, heat = 0;
 function manualRoll() {
-  if (now - lastManual < manualFloor()) return false;
-  lastManual = now; S.rollsManual++;
-  mine._forceFast = true; mine.next = now;             // a quick tumble this frame (banks any in-flight playback)
+  const t = performance.now();
+  taps.push(t); while (taps[0] < t - 1000) taps.shift();
+  const c = taps.length;
+  // Fill mode: every tap rolls one die. Whole-board mode: this tap's share of the rate at this pace.
+  rollBank = Math.min(2, rollBank + (FILL ? 1 : tapRate(c) / c * tapBoost()));
   const btn = document.getElementById("rollBtn"); if (btn) { btn.classList.remove("tap"); void btn.offsetWidth; btn.classList.add("tap"); }
-  SFX.pick(); return true;
+  tapFrame(); return true;
+}
+function tapFrame() {
+  const t = performance.now();
+  while (taps.length && taps[0] < t - 1000) taps.shift();
+  if (rollBank >= 1 && t - lastTapRoll >= (FILL ? 60 : TAP_GAP)) {
+    rollBank -= 1; lastTapRoll = t; S.rollsManual++;
+    if (!FILL) { mine.tapRoll(); SFX.pick(); }                         // neither path touches the timer's progress
+    else if (!mine.fillStep()) { rollBank += 1; S.rollsManual--; }  // last die still in the air: keep the tap for the next board
+  }
+  // Heat: the roll rate the current pace earns, eased so the button warms and cools smoothly.
+  const target = taps.length ? (FILL ? taps.length : tapRate(taps.length) * tapBoost()) : 0;
+  heat += (target - heat) * Math.min(1, (taps.length ? .25 : .08));
+  const btn = document.getElementById("rollBtn"); if (!btn) return;
+  const h = Math.min(1, heat / (FILL ? 8 : 5));
+  btn.style.setProperty("--heat", h.toFixed(3));
+  btn.classList.toggle("hot", h > .62);
+  btn.querySelector("small").textContent = heat >= .5 ? heat.toFixed(1) + "/s" : "";
 }
 
 // ---- onboarding goals: a short chain that leads the first several minutes and pays out -------------
@@ -1076,6 +1178,7 @@ document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
 document.getElementById("rollBtn").addEventListener("click", manualRoll);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
+  if (k === "mode") { const q = new URLSearchParams(location.search); q.set("roll", FILL ? "all" : "fill"); location.search = q.toString(); return; }
   if (k === "cash") { S.points += 5000; SFX.coin(); }
   if (k === "crate") openCrate(true);                                 // free crate (test)
   if (k === "shiny") { crateForce = { shiny: true }; openCrate(true); } // force a shiny pull (test)
@@ -1098,7 +1201,6 @@ addEventListener("resize", onResize);
 // cd = cooldown (ms, game time), dur = how long the buff runs (ms). The stat factors (speed/points/combo)
 // are read inside stats() -> applyBuffs(); a speed factor divides rollMs (so the floor drops below 0.5s while boosted).
 const POWERS = {
-  reroll:    { name: "Reroll",    color: "#2fb36b", cd: 12000, dur: 0 },
   overclock: { name: "Overclock", color: "#3f7cf0", cd: 45000, dur: 10000, speed: 2 },
   surge:     { name: "Surge",     color: "#ffd23f", cd: 40000, dur: 8000,  points: 3 },
 };
@@ -1122,13 +1224,12 @@ function addBuff(spec) {
 }
 
 // Power buttons + cooldown state (cdUntil in game time).
-const powerBtns = {}, pstate = { reroll: 0, overclock: 0, surge: 0 };
+const powerBtns = {}, pstate = { overclock: 0, surge: 0 };
 document.querySelectorAll("[data-power]").forEach(b => { powerBtns[b.dataset.power] = b; b.addEventListener("click", () => usePower(b.dataset.power)); });
 function usePower(k) {
   if (now < pstate[k]) { SFX.no(); return false; }
   const p = POWERS[k]; pstate[k] = now + p.cd;
-  if (k === "reroll") { mine.next = now; SFX.rev(); }                 // roll fires on the next tick
-  else { addBuff({ key: k, name: p.name, color: p.color, dur: p.dur, speed: p.speed, points: p.points }); SFX.rev(); SFX.sparkle(); }
+  { addBuff({ key: k, name: p.name, color: p.color, dur: p.dur, speed: p.speed, points: p.points }); SFX.rev(); SFX.sparkle(); }
   renderPowers(); return true;
 }
 
@@ -1199,7 +1300,7 @@ function frame(t) {
     try { tw.fn(e); } catch (err) { console.error(err); tweens.splice(tweens.indexOf(tw), 1); tw.res(); continue; }
     if (e >= 1) { tweens.splice(tweens.indexOf(tw), 1); tw.res(); }
   }
-  mine.tick(); theirs.tick(); prestigeTick(dt);
+  tapFrame(); mine.tick(); theirs.tick(); prestigeTick(dt);
   powersFrame(dt); // powers cooldowns, buffs, server luck, Mikey
   // crate machine: the sample die spins and bobs; glow when affordable
   cmDie.rotation.y += dt * 1.2; cmDie.position.y = 3.6 + Math.sin(now / 500) * .18;
@@ -1261,7 +1362,7 @@ function frame(t) {
     updateCrateButton();
     const st = (k, v) => document.querySelector(`[data-s=${k}] b`).textContent = v;
     st("dice", `${mine.cells.filter(Boolean).length} / ${S.cells}`); st("combo", `+${fmtMult(mine.combo)}× per die`);
-    st("speed", `every ${secs(mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
+    st("speed", `every ${secs(FILL ? mine.dieMs() : mine.rollMs)}`); st("luck", "×" + fmtMult(luck()));
     checkGoals();
     const gn = document.getElementById("goalName"), gb = document.getElementById("goalBar"), pst = prestigeStatus();
     // Unlocking an empty cell is wasteful, so it's only a goal when a die is waiting in storage.
@@ -1583,7 +1684,7 @@ window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy,
   // storage / collection / shop
   renderStorage, openCollection, openShop, openBag, buyShopItem, SHOP, collectionMult, luck, sellValue, mergeSpecs,
   // active play + goals
-  manualRoll, GOALS, get goalIdx() { return S.goalIdx; },
+  manualRoll, FILL, GOALS, get goalIdx() { return S.goalIdx; },
   // powers
   POWERS, buffs, pstate, usePower, addBuff, stats, mikey,
   // prestige
