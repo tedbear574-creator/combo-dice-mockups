@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("file", nargs="?", default="tycoon-board-3d.html")
+    ap.add_argument("file", nargs="?", default="tycoon-v2.html")
     ap.add_argument("--seconds", type=float, default=6)
     ap.add_argument("--eval", action="append", default=[])
     ap.add_argument("--shot")

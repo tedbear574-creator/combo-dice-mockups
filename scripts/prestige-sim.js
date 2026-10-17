@@ -4,11 +4,11 @@
 //   node scripts/prestige-sim.js --cycles 3 # simulate N prestige cycles
 //
 // It ports the real board scoring rule (color groups, number chains, loose dice) and the
-// economy constants from tycoon-board-3d.html, drives a greedy buyer, and reports the
+// economy constants from tycoon-v1.html, drives a greedy buyer, and reports the
 // game-time it takes to hit each pacing milestone. Keep ECON / the stats() / threshold math
-// in sync with the "economy" and "prestige" sections of tycoon-board-3d.html.
+// in sync with the "economy" and "prestige" sections of tycoon-v1.html.
 
-// ---- economy constants (mirror of tycoon-board-3d.html) -------------------------------------
+// ---- economy constants (mirror of tycoon-v1.html) -------------------------------------
 const E = (k, d) => (process.env[k] !== undefined ? +process.env[k] : d);
 const ECON = {
   dieBase: E("DIE_BASE", 155), dieRate: E("DIE_RATE", 1.32),     // Buy die
