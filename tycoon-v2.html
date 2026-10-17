@@ -72,7 +72,7 @@
      Last roll sheet is capped so the two never overlap at phone height (844x390). */
   .powers { position: absolute; right: 12px; bottom: 20px; display: flex; flex-direction: row; gap: 8px; align-items: center; z-index: 4; }
   body.boardView .powers { bottom: 66px; }
-  body.boardView .sheet { max-height: calc(100vh - 230px); overflow: hidden; }
+  body.boardView .sheet { max-height: calc(100vh - 230px); overflow: hidden; right: 64px; }
   body.boardView .sheet .tot { position: sticky; bottom: -7px; background: #f6f0e1; padding-bottom: 7px; }
   .powers button { position: relative; width: 54px; height: 54px; border-radius: 50%; border: 0; overflow: hidden; color: #fff;
     background: rgba(22,16,44,.82); font: 900 10px "Trebuchet MS", sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,.3), inset 0 0 0 2px var(--pc,#fff);
@@ -185,7 +185,8 @@
   .rollBtn:active { transform: translateX(-50%) translateY(2px); }
   .rollBtn.tap { animation: rollTap .18s ease-out; }
   @keyframes rollTap { 50% { transform: translateX(-50%) scale(1.13); } }
-  body.boardView .rollBtn { bottom: 66px; width: 72px; height: 72px; font-size: 16px; }
+  body.boardView .rollBtn { left: 20px; bottom: 20px; transform: none; width: 80px; height: 80px; font-size: 17px; }
+  body.boardView .rollBtn:active { transform: translateY(2px); }
   /* overlays: book / shop / bag */
   .overlay { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8,6,18,.6); pointer-events: auto; }
   .overlay.open { display: flex; }
@@ -829,6 +830,7 @@ function buy(k) {
   }
   return true;
 }
+const clock = ms => { const t = Math.ceil(ms / 1000); return t < 60 ? t + "s" : Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
 const secs = ms => (ms / 1000).toFixed(ms % 1000 ? (ms % 100 ? 2 : 1) : 1) + "s";
 function earn(v) { S.points += v; S.runPoints += v; S.lifetime += v; S.earned.push([now, v]); }
 const fmt = n => n < 1e4 ? Math.floor(n).toLocaleString("en-US") : n < 1e6 ? (n / 1e3).toFixed(1) + "K" : n < 1e9 ? (n / 1e6).toFixed(2) + "M" : (n / 1e9).toFixed(2) + "B";
@@ -1160,7 +1162,7 @@ function renderPowers() {
     btn.classList.toggle("ready", cdLeft <= 0 && !buff);
     btn.classList.toggle("active", !!buff);
     btn.querySelector(".sweep").style.setProperty("--cd", (cdLeft > 0 ? Math.min(1, cdLeft / POWERS[k].cd) : 0) * 360 + "deg");
-    btn.querySelector(".num").textContent = buff ? Math.ceil((buff.until - now) / 1000) + "s" : cdLeft > 0 ? Math.ceil(cdLeft / 1000) + "s" : "";
+    btn.querySelector(".num").textContent = buff ? clock(buff.until - now) : cdLeft > 0 ? clock(cdLeft) : "";
   }
 }
 const chipsEl = document.getElementById("buffs"), chipEls = new Map();
@@ -1181,7 +1183,7 @@ function renderChips() {
     }
     const left = Math.max(0, b.until - now);
     el.querySelector(".cn").textContent = b.name;
-    el.querySelector("b").textContent = Math.ceil(left / 1000) + "s";
+    el.querySelector("b").textContent = clock(left);
     el.querySelector(".cbar").style.width = (left / b.dur * 100) + "%";
   }
   document.body.classList.toggle("surging", buffs.some(b => b.points));
@@ -1432,9 +1434,9 @@ function playCrate(pulls) {
 function updateCrateButton() {
   const btn = C("barCrate"); if (!btn) return;
   const ok = crateAvailable(), cd = crateCdLeft();
-  const label = !ok ? `Crate<small>locked</small>` : cd > 0 ? `Crate<small>${Math.ceil(cd / 1000)}s</small>` : `Open crate<small>${fmt(crateCost())}</small>`;
+  const label = !ok ? `Crate<small>locked</small>` : cd > 0 ? `Crate<small>${clock(cd)}</small>` : `Open crate<small>${fmt(crateCost())}</small>`;
   btn.innerHTML = label; btn.disabled = !ok || cd > 0 || S.points < crateCost();
-  if (crateTag) { crateTag.el.innerHTML = !ok ? `Crate<small>soon</small>` : cd > 0 ? `Crate<small>${Math.ceil(cd / 1000)}s</small>` : `Crate<small>${fmt(crateCost())}</small>`;
+  if (crateTag) { crateTag.el.innerHTML = !ok ? `Crate<small>soon</small>` : cd > 0 ? `Crate<small>${clock(cd)}</small>` : `Crate<small>${fmt(crateCost())}</small>`;
     crateTag.el.classList.toggle("poor", ok && cd <= 0 && S.points < crateCost()); }
 }
 // World crate machine on the plot (replaces v1's special-dice pad). Walk into it to open a crate.
