@@ -66,6 +66,25 @@
   @keyframes writeIn { from { opacity: 0; transform: translateX(-8px); } }
   @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(.3); } 70% { transform: translate(-50%, -50%) scale(1.25); } }
   @keyframes rise { to { transform: translate(-50%, -160%); opacity: 0; } }
+  /* ---- specials: buy-bar button + picker overlay ---- */
+  .bSpecial { background: #8d6cff; }
+  .picker { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10,8,22,.6); pointer-events: auto; z-index: 5; }
+  .picker.open { display: flex; }
+  .pkPanel { position: relative; background: rgba(22,16,44,.96); border-radius: 18px; padding: 14px 14px 16px; width: 300px; max-width: 86vw; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  .pkHead { font: 900 13px "Trebuchet MS", sans-serif; letter-spacing: .12em; opacity: .6; margin: 0 0 10px 2px; }
+  .pkClose { position: absolute; top: 10px; right: 10px; border: 0; width: 28px; height: 28px; border-radius: 9px; background: rgba(255,255,255,.14); color: #fff; font: 900 14px sans-serif; }
+  .pkList { display: flex; flex-direction: column; gap: 7px; }
+  .pkRow { display: flex; align-items: center; gap: 10px; border: 0; border-radius: 12px; background: rgba(255,255,255,.07); padding: 7px 10px; color: #fff;
+    font: 800 14px "Trebuchet MS", sans-serif; text-align: left; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+  .pkRow:active { transform: translateY(1px); }
+  .pkRow.locked { opacity: .55; }
+  .pkEmb { width: 40px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font: 900 13px "Trebuchet MS", sans-serif;
+    color: #1a1a2a; background: var(--c, #fff); flex: none; box-shadow: inset 0 -2px 0 rgba(0,0,0,.3); }
+  .pkEmb.rainbow { background: linear-gradient(90deg,#ff4b52,#f5bf1d,#2fb36b,#3f7cf0,#9b5de5); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .pkName { flex: 1; }
+  .pkCost { color: #ffd23f; font-weight: 900; }
+  .pkCost.poor { color: #ff8a8a; }
+  .pkLock { color: #9aa6c4; font-weight: 900; font-size: 12px; }
 </style>
 <script type="importmap">{ "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -80,8 +99,16 @@
   <div class="dev"><button data-dev="cash">+1,000</button><button data-dev="fast">Max speed</button><button data-dev="fill">Fill board</button><button data-dev="sound" class="on">Sound</button></div>
   <div id="stick"><i></i></div>
   <div class="boardBar">
-    <button class="bDie" data-buy="die"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button>
+    <button class="bDie" data-buy="die"></button><button class="bCombo" data-buy="combo"></button><button class="bSpeed" data-buy="speed"></button><button class="bSpecial" data-buy="special"></button>
     <button class="bWalk" data-act="walk">Walk away</button>
+  </div>
+  <!-- specials picker overlay -->
+  <div class="picker" id="picker">
+    <div class="pkPanel">
+      <div class="pkHead">SPECIAL DICE</div>
+      <button class="pkClose" id="pkClose">✕</button>
+      <div class="pkList" id="pkList"></div>
+    </div>
   </div>
 </div>
 <script type="module">
@@ -203,6 +230,8 @@ function upQuat(n, yaw) {
   return new THREE.Quaternion().setFromAxisAngle(UP, yaw * Math.PI / 2).multiply(q);
 }
 const rnd = n => Math.floor(Math.random() * n);
+// Weighted specials only ever roll 4-6; everything else rolls 1-6.
+const rollFace = d => d && d.special === "weighted" ? 4 + rnd(3) : 1 + rnd(6);
 
 // ================================================================ tweens
 let now = performance.now();
@@ -247,10 +276,12 @@ class Board {
     return order.find(i => !this.cells[i]);
     function dist(i) { const r = Math.floor(i / N) - 2, c = i % N - 2; return r * r + c * c + (r + c) * .01; }
   }
-  addDie(i, color, drop) {
-    const mesh = new THREE.Mesh(dieGeo, MATS[color]); mesh.castShadow = true; mesh.receiveShadow = true;
-    const d = { mesh, color, face: 1 + rnd(6), held: false }; mesh.quaternion.copy(upQuat(d.face, rnd(4)));
+  addDie(i, color, drop, special = null) {
+    const mesh = new THREE.Mesh(dieGeo, special ? specialMats(color, special) : MATS[color]); mesh.castShadow = true; mesh.receiveShadow = true;
+    const d = { mesh, color, face: special === "weighted" ? 4 + rnd(3) : 1 + rnd(6), held: false, special };
+    mesh.quaternion.copy(upQuat(d.face, rnd(4)));
     const p = this.cellPos(i); mesh.position.copy(p); this.group.add(mesh); this.cells[i] = d;
+    if (special) this.decorate(d, special);
     if (drop) {
       mesh.position.y = p.y + 28;
       tween(520, e => { mesh.position.y = p.y + 28 * (1 - e * e); }).then(() => {
@@ -265,9 +296,26 @@ class Board {
   //   Dice in no color group score their face once, together, as "loose dice".
   // faces: optional per-cell faces to score instead of the ones showing (a roll scored while the last one is still animating).
   score(faces) {
-    const live = i => { const d = this.cells[i]; return d && !d.held ? { color: d.color, face: faces ? faces[i] : d.face } : null; };
+    const cells = this.cells;
     const nbrs = i => { const r = Math.floor(i / N), c = i % N;
       return NB.map(([dr, dc]) => [r + dr, c + dc]).filter(([r2, c2]) => r2 >= 0 && r2 < N && c2 >= 0 && c2 < N).map(([r2, c2]) => r2 * N + c2); };
+    const on = i => { const d = cells[i]; return d && !d.held ? d : null; };
+    const base = i => faces ? faces[i] : cells[i].face;
+    // ---- SPECIAL DICE effects on the faces, resolved before grouping ----
+    //   Mirror shows the highest base face among the dice touching it (its own roll is ignored if it has neighbours).
+    //   Adder adds +1 to every die it touches; two adders on one die stack to +2. Applied after mirrors resolve,
+    //     so an adder next to a mirror bumps the reflected value.
+    const eff = Array(N * N).fill(null);
+    for (let i = 0; i < N * N; i++) if (on(i)) eff[i] = base(i);
+    for (let i = 0; i < N * N; i++) if (on(i) && cells[i].special === "mirror") {
+      const ns = nbrs(i).filter(on); if (ns.length) eff[i] = Math.max(...ns.map(base));
+    }
+    const added = Array(N * N).fill(0);
+    for (let i = 0; i < N * N; i++) if (on(i)) { added[i] = nbrs(i).filter(j => on(j) && cells[j].special === "adder").length; eff[i] += added[i]; }
+    // Wild is a wildcard for BOTH colour and number: it links to any touching die, so it joins and bridges
+    //   groups/chains of different colour or number. Multiplier doubles the points of each group/chain it is a
+    //   member of; two multipliers in one group stack (x4). Weighted is handled at roll time (only rolls 4-6).
+    const live = i => on(i) ? { color: cells[i].color, face: eff[i], wild: cells[i].special === "wild" } : null;
     const flood = same => {
       const seen = new Set(), out = [];
       for (let i = 0; i < N * N; i++) {
@@ -278,17 +326,21 @@ class Board {
       }
       return out;
     };
-    const linksOf = cells => { const set = new Set(cells), out = []; for (const i of cells) for (const j of nbrs(i)) if (j > i && set.has(j)) out.push({ i, j }); return out; };
+    const linksOf = cs => { const set = new Set(cs), out = []; for (const i of cs) for (const j of nbrs(i)) if (j > i && set.has(j)) out.push({ i, j }); return out; };
     const mult = n => 1 + (n - 1) * this.combo;
-    const sumOf = cells => cells.reduce((t, i) => t + live(i).face, 0);
-    const colorGroups = flood((x, y) => x.color === y.color);
+    const sumOf = cs => cs.reduce((t, i) => t + eff[i], 0);
+    const bumpOf = cs => cs.reduce((t, i) => t + added[i], 0);
+    const multx = cs => Math.pow(2, cs.filter(i => cells[i].special === "multiplier").length);
+    const colOf = cs => { const d = cs.map(i => cells[i]).find(d => d.special !== "wild"); return d ? d.color : "wild"; };
+    const faceOf = cs => { const i = cs.find(i => cells[i].special !== "wild"); return eff[i != null ? i : cs[0]]; };
+    const colorGroups = flood((x, y) => x.color === y.color || x.wild || y.wild);
     const steps = [];
     const loose = colorGroups.filter(g => g.length === 1).flat();
-    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: 1, pts: sumOf(loose), links: [] });
-    const groups = colorGroups.filter(g => g.length > 1).map(cells => ({ kind: "color", color: live(cells[0]).color, cells, sum: sumOf(cells), mult: mult(cells.length), links: linksOf(cells) }));
-    const chains = flood((x, y) => x.face === y.face).filter(g => g.length > 1)
-      .map(cells => ({ kind: "chain", n: live(cells[0]).face, cells, sum: sumOf(cells), mult: mult(cells.length), links: linksOf(cells).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
-    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult);
+    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: 1, multx: 1, added: bumpOf(loose), pts: 0, links: [] });
+    const groups = colorGroups.filter(g => g.length > 1).map(cs => ({ kind: "color", color: colOf(cs), cells: cs, sum: sumOf(cs), mult: mult(cs.length), multx: multx(cs), added: bumpOf(cs), links: linksOf(cs) }));
+    const chains = flood((x, y) => x.face === y.face || x.wild || y.wild).filter(g => g.length > 1)
+      .map(cs => ({ kind: "chain", n: faceOf(cs), cells: cs, sum: sumOf(cs), mult: mult(cs.length), multx: multx(cs), added: bumpOf(cs), links: linksOf(cs).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
+    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult * g.multx);
     if (loose.length) steps[0].pts = Math.round(steps[0].sum * this.pointsMult);
     const byPts = (x, y) => x.pts - y.pts;
     steps.push(...groups.sort(byPts), ...chains.sort(byPts));
@@ -300,7 +352,7 @@ class Board {
     let landed = 0;
     const jobs = this.cells.map((d, i) => {
       if (!d || d.held) return null;
-      const nf = 1 + rnd(6), q0 = d.mesh.quaternion.clone(), q1 = upQuat(nf, rnd(4)), p = this.cellPos(i); d.face = nf;
+      const nf = rollFace(d), q0 = d.mesh.quaternion.clone(), q1 = upQuat(nf, rnd(4)), p = this.cellPos(i); d.face = nf;
       const axis = new THREE.Vector3(Math.random() - .5, 0, Math.random() - .5).normalize(), turns = fast ? 0 : 1 + rnd(2);
       const h = fast ? 1.2 : 2.6 + Math.random() * 1.6, dur = fast ? 230 : 620 + Math.random() * 120;
       return tween(dur, e => {
@@ -338,7 +390,7 @@ class Board {
     const el = popAt(at, "", "grp");
     if (el) {
       el.style.setProperty("--c", "#" + new THREE.Color(hex).getHexString());
-      el.innerHTML = st.kind === "loose" ? `${st.sum}<small>loose</small>` : `${st.sum}<small>×${fmtMult(st.mult)}</small>`;
+      el.innerHTML = st.kind === "loose" ? `${st.sum}<small>loose${st.added > 0 ? ` +${st.added}` : ""}</small>` : `${st.sum}<small>×${fmtMult(st.mult)}${stepExtra(st)}</small>`;
     }
     SFX.link(k * 2);
     await wait(st.kind === "loose" ? 500 : 750);
@@ -350,7 +402,7 @@ class Board {
   }
   // A roll that comes due while the last one is still animating: scored on time, its points fly from the timer strip.
   quickRoll() {
-    const res = this.score(this.cells.map(d => d && 1 + rnd(6)));
+    const res = this.score(this.cells.map(d => d && rollFace(d)));
     if (!this.mine) return;
     S.best = Math.max(S.best, res.total); SFX.coin();
     const el = popAt(this.group.position.clone().add(new THREE.Vector3(0, 1.6, (N * CELL + 2) / 2 - .45)), "+" + fmt(res.total), "quick");
@@ -399,12 +451,16 @@ class Board {
   tick() {
     if (now >= this.next) { this.next = now + this.rollMs; if (this.busy) this.quickRoll(); else this.roll(); }
     if (this.timer) { const p = Math.min(1, Math.max(0, 1 - (this.next - now) / this.rollMs)); this.timer.scale.x = Math.max(.001, p); this.timer.position.x = -this.timerL / 2 * (1 - p); }
+    this.updateDecos();
   }
 }
 
 const RIMS = [[0x5c361a, 0, .6], [0xb0703a, .6, .35], [0xc9d2db, .8, .25], [0xf0bf30, .85, .2], [0xb784ff, .7, .2]];
 const WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
-const stepHex = st => st.kind === "chain" ? 0xffe27a : st.kind === "loose" ? 0x9aa6c4 : new THREE.Color(COLORS[st.color]).offsetHSL(0, .1, .12).getHex();
+const stepHex = st => st.kind === "chain" ? 0xffe27a : st.kind === "loose" ? 0x9aa6c4
+  : COLORS[st.color] ? new THREE.Color(COLORS[st.color]).offsetHSL(0, .1, .12).getHex() : 0xbda7ff;
+// What specials did, for the group pop and the Last roll list: "+N" bumped faces (adder), "×K" doubling (multiplier).
+const stepExtra = st => (st.added > 0 ? ` +${st.added}` : "") + (st.multx > 1 ? ` ×${st.multx}` : "");
 const fmtMult = m => Number.isInteger(m) ? String(m) : m.toFixed(2).replace(/0$/, "");
 const linesEl = () => document.getElementById("lines");
 function sheetStart() { linesEl().innerHTML = ""; sheetTotal(0); }
@@ -412,9 +468,10 @@ function sheetTotal(v) { document.getElementById("sheetTot").textContent = fmt(v
 function sheetLine(st) {
   const name = st.kind === "loose" ? `Loose · ${st.cells.length} ${st.cells.length === 1 ? "die" : "dice"}` : st.kind === "chain" ? `${WORDS[st.cells.length] || st.cells.length} ${st.n}s`
     : `${st.color[0].toUpperCase() + st.color.slice(1)} · ${st.cells.length} dice`;
-  const dot = st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : COLORS[st.color]}"></i>`;
-  const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${st.sum} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
-  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
+  const note = st.added > 0 ? ` <span style="color:#7bd99a">+${st.added}</span>` : "";
+  const dot = st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
+  const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${st.sum} × ${fmtMult(st.mult)}${st.multx > 1 ? ` × <span style="color:#b07800">${st.multx}</span>` : ""} = <b>${fmt(st.pts)}</b>`;
+  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${dot}<span>${name}${note}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
   while (linesEl().children.length > 9) linesEl().firstChild.remove();
 }
 function announce(html) {
@@ -430,7 +487,7 @@ const theirs = new Board(70, false); theirs.rollMs = 1400;
 for (let k = 0; k < 21; k++) theirs.addDie(theirs.emptyCell(), CNAMES[[0, 0, 1, 2, 2, 3][rnd(6)]], false);
 
 // ================================================================ economy
-const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0 };
+const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], best: 0, specials: 0 };
 // Every rule that sets the roll interval, combo bonus or points multiplier adds its factor here; applyStats() pushes
 // the result onto the board. pointsMult multiplies each scored group's points.
 function stats() {
@@ -445,10 +502,12 @@ const COST = {
   die: () => Math.round(25 * Math.pow(1.35, S.bought)),
   combo: () => Math.round(150 * Math.pow(1.5, S.comboLv)),
   speed: () => Math.round(100 * Math.pow(1.5, S.speedLv)),
+  special: () => specialCost(),
 };
-const NAMES = { die: "Buy die", combo: "Better combos", speed: "Faster rolls" };
+const NAMES = { die: "Buy die", combo: "Better combos", speed: "Faster rolls", special: "Special" };
 const canBuy = k => (k !== "die" || mine.emptyCell() !== undefined) && (k !== "speed" || stats().rollMs > 500) && (k !== "combo" || stats().combo < 5);
 function buy(k) {
+  if (k === "special") { openPicker(); return false; } // the special pad / buy-bar button opens the kind picker
   if (!canBuy(k) || S.points < COST[k]()) { SFX.no(); return false; }
   S.points -= COST[k](); S.shown = Math.min(S.shown, S.points); SFX.buy();
   if (k === "die") { S.bought++; mine.addDie(mine.emptyCell(), CNAMES[rnd(5)], true); flashStat("dice"); }
@@ -493,6 +552,7 @@ function tag(world, html, cls = "") { const el = document.createElement("div"); 
 // ================================================================ buy pads
 const pads = [
   { k: "die", x: -11, z: 17, color: 0x2fb36b }, { k: "combo", x: 11, z: 17, color: 0x9b5de5 }, { k: "speed", x: 18.5, z: 17, color: 0x3f7cf0 },
+  { k: "special", x: -18.5, z: 17, color: 0x8d6cff },
 ].map(p => {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, .35, 32), new THREE.MeshStandardMaterial({ color: p.color, emissive: p.color, emissiveIntensity: .3 }));
   mesh.position.set(p.x, .55, p.z); mesh.receiveShadow = true; scene.add(mesh);
@@ -535,7 +595,7 @@ function enterBoard() {
   mode = "board"; document.body.classList.add("boardView"); SFX.whoosh();
   tween(300, e => { player.position.x += (MAT.x - player.position.x) * e; player.position.z += (MAT.z + .4 - player.position.z) * e; });
 }
-function leaveBoard() { mode = "walk"; matArmed = false; document.body.classList.remove("boardView"); player.position.z = MAT.z + 5; yaw = 0; SFX.whoosh(); }
+function leaveBoard() { mode = "walk"; matArmed = false; document.body.classList.remove("boardView"); player.position.z = MAT.z + 5; yaw = 0; cancelReplace(); closePicker(); SFX.whoosh(); }
 
 // ================================================================ pointer: orbit while walking, drag dice at the board
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -548,6 +608,7 @@ renderer.domElement.addEventListener("pointerdown", e => {
   const meshes = mine.cells.map(d => d && d.mesh).filter(Boolean);
   const h = !mine.tumbling && ray.intersectObjects(meshes)[0]; if (!h) return;
   const from = mine.cells.findIndex(d => d && d.mesh === h.object), d = mine.cells[from];
+  if (replaceKind) { finishReplace(from); return; } // board was full: this tap chooses the die the special replaces
   d.held = true; drag = { id: e.pointerId, from, d, to: from }; SFX.pick();
   renderer.domElement.setPointerCapture(e.pointerId);
 });
@@ -665,6 +726,148 @@ function frame(t) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
-window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy }; // test hook
+// ================================================================ special dice
+// Five special dice, each adapted to our group/chain scoring (rules live in Board.score()). Unlocked by prestige
+// level (read as (S.prestige || 0); the prestige feature is built in parallel). Cost is the same for every kind at a
+// given time: ceil(120 × 1.6^(specials already owned)). Each kind reads instantly from a floating emblem (a sprite,
+// so it faces both the walk camera and the overhead view), a coloured ground ring (overhead), a glow, and a material
+// tweak — while the die keeps its colour so colour grouping still reads.
+const SPECIAL = {
+  weighted:   { lv: 1, name: "Weighted",   sym: "4-6", col: 0x8a93a6, glow: 0xc3ccda, dark: true },
+  wild:       { lv: 2, name: "Wild",       sym: "ALL", col: 0xffffff, glow: 0xffffff, rainbow: true },
+  adder:      { lv: 3, name: "Adder",      sym: "+1",  col: 0x2fb36b, glow: 0x8df0b4 },
+  mirror:     { lv: 4, name: "Mirror",     sym: "MAX", col: 0x49e0e0, glow: 0xa6f6f6, dark: true },
+  multiplier: { lv: 5, name: "Multiplier", sym: "×2",  col: 0xffd23f, glow: 0xffe27a, dark: true },
+};
+const SKINDS = Object.keys(SPECIAL);
+const hex6 = n => n.toString(16).padStart(6, "0");
+const specialCost = () => Math.ceil(120 * Math.pow(1.6, S.specials));
+
+// --- die materials & decorations ---
+function wildFaceTex(n) {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  const grd = g.createLinearGradient(0, 0, 128, 128);
+  ["#ef4b52", "#f5bf1d", "#2fb36b", "#3f7cf0", "#9b5de5"].forEach((col, k, a) => grd.addColorStop(k / (a.length - 1), col));
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  const sh = g.createRadialGradient(46, 40, 8, 64, 64, 96); sh.addColorStop(0, "rgba(255,255,255,.28)"); sh.addColorStop(1, "rgba(0,0,0,.18)");
+  g.fillStyle = sh; g.fillRect(0, 0, 128, 128);
+  for (const [x, y] of PIPS[n]) {
+    g.beginPath(); g.arc(x * 128, y * 128 + 2.5, 12.5, 0, 7); g.fillStyle = "rgba(0,0,0,.3)"; g.fill();
+    g.beginPath(); g.arc(x * 128, y * 128, 12.5, 0, 7); g.fillStyle = "#fff"; g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+function specialMats(color, kind) {
+  if (kind === "wild") return FACE_AT.map(n => new THREE.MeshStandardMaterial({ map: wildFaceTex(n), roughness: .3, metalness: .2, emissive: new THREE.Color(0x222244), emissiveIntensity: .6 }));
+  const tweak = {
+    weighted:   { metalness: .75, roughness: .3,  emissive: 0x2b3240, ei: .5 },
+    adder:      { metalness: 0,   roughness: .4,  emissive: 0x0f5a33, ei: .6 },
+    mirror:     { metalness: .95, roughness: .12, emissive: 0x0d4a4a, ei: .5 },
+    multiplier: { metalness: .3,  roughness: .35, emissive: 0x6a5300, ei: .7 },
+  }[kind] || {};
+  return MATS[color].map(m => {
+    const c = m.clone();
+    if (tweak.metalness != null) c.metalness = tweak.metalness;
+    if (tweak.roughness != null) c.roughness = tweak.roughness;
+    if (tweak.emissive != null) { c.emissive = new THREE.Color(tweak.emissive); c.emissiveIntensity = tweak.ei || .5; }
+    return c;
+  });
+}
+function badgeTex(kind) {
+  const sp = SPECIAL[kind], W = 256, H = 128, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+  const pad = 10, r = 56;
+  if (sp.rainbow) { const grd = g.createLinearGradient(0, 0, W, 0); ["#ef4b52", "#f5bf1d", "#2fb36b", "#3f7cf0", "#9b5de5"].forEach((col, k, a) => grd.addColorStop(k / (a.length - 1), col)); g.fillStyle = grd; }
+  else g.fillStyle = "#" + hex6(sp.col);
+  g.beginPath(); g.roundRect(pad, pad, W - 2 * pad, H - 2 * pad, r); g.fill();
+  g.lineWidth = 8; g.strokeStyle = "rgba(0,0,0,.35)"; g.stroke();
+  g.fillStyle = (sp.dark || sp.rainbow) ? "#1a1a2a" : "#fff";
+  g.font = `900 ${sp.sym.length > 2 ? 58 : 72}px "Trebuchet MS", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(sp.sym, W / 2, H / 2 + 4);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+function glowTex() {
+  if (glowTex._t) return glowTex._t;
+  const s = 128, c = document.createElement("canvas"); c.width = c.height = s; const g = c.getContext("2d");
+  const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(.4, "rgba(255,255,255,.5)"); grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, s, s);
+  return glowTex._t = new THREE.CanvasTexture(c);
+}
+Board.prototype.decorate = function (d, kind) {
+  const sp = SPECIAL[kind];
+  const emb = new THREE.Sprite(new THREE.SpriteMaterial({ map: badgeTex(kind), transparent: true, depthTest: true })); emb.scale.set(2.7, 1.35, 1);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: sp.glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); glow.scale.set(5.2, 5.2, 1);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(CELL * 0.38, .13, 10, 28), new THREE.MeshBasicMaterial({ color: sp.col })); ring.rotation.x = Math.PI / 2;
+  this.group.add(glow, ring, emb);
+  d.emblem = emb; d.glow = glow; d.ring = ring;
+};
+Board.prototype.updateDecos = function () {
+  const t = now;
+  for (let i = 0; i < N * N; i++) {
+    const d = this.cells[i]; if (!d || !d.special) continue; const m = d.mesh;
+    if (d.ring) { d.ring.position.set(m.position.x, TOP + .1, m.position.z); d.ring.rotation.z += .03; d.ring.scale.setScalar(1 + .08 * Math.sin(t / 260 + i)); }
+    if (d.emblem) d.emblem.position.set(m.position.x, m.position.y + DIE * .95 + .22 * Math.sin(t / 420 + i), m.position.z);
+    if (d.glow) { d.glow.position.set(m.position.x, m.position.y + DIE * .5, m.position.z); d.glow.material.opacity = .28 + .16 * Math.sin(t / 220 + i); }
+    if (d.special === "wild") { // wild shimmers through the rainbow so "counts as every colour" reads at a glance
+      const col = new THREE.Color().setHSL((t / 1400 + i * .1) % 1, .9, .6);
+      if (Array.isArray(m.material)) m.material.forEach(mm => mm.emissive && mm.emissive.copy(col).multiplyScalar(.4));
+      if (d.ring) d.ring.material.color.copy(col); if (d.glow) d.glow.material.color.copy(col);
+    }
+  }
+};
+Board.prototype.removeDie = function (i) {
+  const d = this.cells[i]; if (!d) return;
+  this.group.remove(d.mesh);
+  if (Array.isArray(d.mesh.material) && d.mesh.material !== MATS[d.color]) // normal dice share MATS — only dispose per-die clones
+    d.mesh.material.forEach(m => { if (d.special === "wild" && m.map) m.map.dispose(); m.dispose(); });
+  for (const o of [d.emblem, d.glow, d.ring]) if (o) { this.group.remove(o); if (o.material) { if (o.material.map && o.material.map !== glowTex._t) o.material.map.dispose(); o.material.dispose(); } if (o.geometry) o.geometry.dispose(); }
+  this.cells[i] = null;
+};
+
+// --- buying ---
+let replaceKind = null;
+function buySpecial(kind, cell) {
+  const sp = SPECIAL[kind]; if (!sp) return false;
+  if ((S.prestige || 0) < sp.lv) { SFX.no(); return false; }
+  const cost = specialCost();
+  if (S.points < cost) { SFX.no(); return false; }
+  let i = (cell == null) ? mine.emptyCell() : cell;
+  if (i == null) { closePicker(); startReplace(kind); return "replace"; } // board full: player picks a die to replace
+  S.points -= cost; S.shown = Math.min(S.shown, S.points); S.specials++; SFX.buy();
+  if (mine.cells[i]) mine.removeDie(i);
+  mine.addDie(i, CNAMES[rnd(5)], true, kind);
+  flashStat("dice"); cancelReplace(); closePicker();
+  announce(`<b>${sp.name}</b> added`);
+  return true;
+}
+function startReplace(kind) {
+  replaceKind = kind; document.body.classList.add("replacing");
+  announce(`Tap a die to replace with <b>${SPECIAL[kind].name}</b>`);
+  mine.cells.forEach((d, i) => { if (d) tween(260, e => d.mesh.scale.setScalar(1 + .14 * Math.sin(Math.PI * e)), (i % N) * 20); });
+  SFX.pick();
+}
+function finishReplace(cell) { const k = replaceKind; replaceKind = null; document.body.classList.remove("replacing"); buySpecial(k, cell); }
+function cancelReplace() { replaceKind = null; document.body.classList.remove("replacing"); }
+
+// --- picker ---
+function openPicker() {
+  cancelReplace();
+  const list = document.getElementById("pkList"); list.innerHTML = "";
+  const pres = (S.prestige || 0), cost = specialCost();
+  for (const k of SKINDS) {
+    const sp = SPECIAL[k], unlocked = pres >= sp.lv, afford = S.points >= cost;
+    const row = document.createElement("button"); row.className = "pkRow" + (unlocked ? "" : " locked");
+    row.innerHTML = `<i class="pkEmb${sp.rainbow ? " rainbow" : ""}" style="--c:#${hex6(sp.col)}">${sp.sym}</i><span class="pkName">${sp.name}</span>`
+      + (unlocked ? `<span class="pkCost${afford ? "" : " poor"}">${fmt(cost)}</span>` : `<span class="pkLock">P${sp.lv}</span>`);
+    if (unlocked) row.addEventListener("click", () => buySpecial(k)); else row.disabled = true;
+    list.appendChild(row);
+  }
+  document.getElementById("picker").classList.add("open"); SFX.pick();
+}
+function closePicker() { document.getElementById("picker").classList.remove("open"); }
+document.getElementById("pkClose").addEventListener("click", closePicker);
+document.getElementById("picker").addEventListener("click", e => { if (e.target.id === "picker") closePicker(); });
+
+window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy, buySpecial, openPicker, closePicker, SPECIAL, specialCost }; // test hook
 </script>
 </body></html>
