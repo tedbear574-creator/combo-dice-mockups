@@ -490,7 +490,7 @@ const S = { points: 0, shown: 0, speedLv: 0, comboLv: 0, bought: 0, earned: [], 
 // the result onto the board. pointsMult multiplies each scored group's points.
 // Prestige hooks in here (see the prestige section): +25% points per level, a higher combo cap, a faster roll floor.
 // Prestige tuning + pure helpers (the rest of the prestige feature is in its own section below).
-// Numbers tuned with scripts/prestige-sim.js: first die <15s, full 5x5 ~10-11min, caps ~15-16min, first prestige ~17min.
+// Numbers tuned with scripts/prestige-sim.js: first die ~12s, full 5x5 ~12.5min, caps ~16-17min, first prestige ~18min.
 const PRESTIGE = { base: 900000, rate: 2.8, pointsPer: .25, comboCapPer: 1, rollFloorPer: 60, startDiePer: 1, maxN: 7 };
 const rollFloor = p => Math.max(220, 500 - PRESTIGE.rollFloorPer * p);        // faster floor each level
 const comboCap = p => 5 + PRESTIGE.comboCapPer * p;                           // higher combo cap each level
@@ -508,7 +508,7 @@ function stats() {
 }
 function applyStats() { const s = stats(); mine.rollMs = s.rollMs; mine.combo = s.combo; mine.pointsMult = s.pointsMult; return s; }
 const COST = {
-  die: () => Math.round(160 * Math.pow(1.29, S.bought)),
+  die: () => Math.round(155 * Math.pow(1.32, S.bought)),
   combo: () => Math.round(560 * Math.pow(1.43, S.comboLv)),
   speed: () => Math.round(480 * Math.pow(1.5, S.speedLv)),
 };

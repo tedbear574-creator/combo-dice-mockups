@@ -11,7 +11,7 @@
 // ---- economy constants (mirror of tycoon-board-3d.html) -------------------------------------
 const E = (k, d) => (process.env[k] !== undefined ? +process.env[k] : d);
 const ECON = {
-  dieBase: E("DIE_BASE", 160), dieRate: E("DIE_RATE", 1.29),     // Buy die
+  dieBase: E("DIE_BASE", 155), dieRate: E("DIE_RATE", 1.32),     // Buy die
   comboBase: E("COMBO_BASE", 560), comboRate: E("COMBO_RATE", 1.43), // Better combos
   speedBase: E("SPEED_BASE", 480), speedRate: E("SPEED_RATE", 1.5), // Faster rolls
   comboStep: 0.25,
