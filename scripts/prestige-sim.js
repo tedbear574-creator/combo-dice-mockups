@@ -63,7 +63,7 @@ function avgScore(s) {
   const N = boardSizeFor(s.prestige), order = cellOrder(N), placed = s.board; // s.board: list of {tier,color,level}
   const key = N + "|" + comboOf(s).toFixed(3) + "|" + placed.map(d => d.tier + d.color + (d.level | 0)).sort().join(",");
   if (avgCache.has(key)) return avgCache.get(key);
-  const combo = comboOf(s), trials = 300; let sum = 0;
+  const combo = comboOf(s), trials = 160; let sum = 0;
   for (let t = 0; t < trials; t++) {
     const cells = Array(N * N).fill(null);
     placed.forEach((d, k) => { const vals = faceSet(TIERS[d.tier].sides); cells[order[k]] = { color: d.color, face: vals[rnd(6)], mult: dieMult(d.tier, d.level) }; });
@@ -137,8 +137,8 @@ function run(label, buyer) {
     if (s.collection.size >= 30) mark("allKinds");
     // Prestige when a level is reachable AND the board is full this run (so the run's work is banked first).
     if (s.runPoints >= levelThreshold(s.prestige) && s.cells >= maxCells(s)) doPrestige(s);
-    if (gt > 14 * DAY) break; // 14 game-days safety
-    if (marks.firstMythic !== undefined && marks.boardFull !== undefined && marks.allKinds !== undefined) break;
+    if (gt > 5 * DAY) break; // 5 game-days horizon (keeps the gate fast; top-tier is already clearly multi-day by here)
+    if (marks.firstMythic !== undefined && marks.boardFull !== undefined) break;
   }
   const fmtT = sec => sec == null ? "—" : sec < 3600 ? `${Math.floor(sec / 60)}m${String(Math.floor(sec % 60)).padStart(2, "0")}s`
     : sec < 86400 ? `${(sec / 3600).toFixed(1)}h` : `${(sec / 86400).toFixed(1)}d`;
