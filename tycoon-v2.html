@@ -334,6 +334,7 @@ const SFX = {
   no() { tone(180, .18, "square", .08, 0, 120); },
   thunk() { tone(110, .3, "sine", .5, 0, 45); hiss(.15, 400, .8, .3); },
   pick() { tone(620, .06, "triangle", .2); },
+  thud() { const t = performance.now(); if (t - (SFX.lastThud || 0) < 50) return; SFX.lastThud = t; tone(140 + Math.random() * 30, .06, "sine", .05, 0, 90); },
   whoosh() { hiss(.3, 700, .9, .2); },
   rev() { tone(220, .45, "sawtooth", .07, 0, 880); hiss(.35, 1200, .9, .15); tone(880, .2, "triangle", .15, .4); },
   sparkle() { [784, 988, 1175, 1568, 1976].forEach((f, k) => tone(f, .25, "triangle", .14, k * .06)); },
@@ -634,17 +635,19 @@ class Board {
   }
 
   // ---- my board: rolls in steps; a landed board shows its score, then the bubbles finish on their own ----
-  // A tap is one step, and the timer adds one every dieMs. Roll the board: steps fill the strip, one share per die,
-  // and a full strip flips the whole board. Roll each die: each step rolls the next die. When a board lands it
+  // A tap is one step, and the timer adds one every dieMs. A board takes one step per die, up to STEP_CAP steps
+  // (a bigger board rolls more dice per step). Roll the board: steps fill the strip and a full strip flips the
+  // whole board. Roll each die: each step rolls the next die(s), several in the air at once. When a board lands it
   // scores at once (showScore). The next flip or board waits SCORE_BEAT so the score can be read; taps meanwhile
   // wait on ROLL. The score's bubbles then finish while the next board rolls.
   dieMs() { return this.rollMs / 4; }
   dieCount() { return this.cells.filter(Boolean).length; }
-  rollEvery() { return FILL ? this.dieMs() : this.dieMs() * Math.max(1, this.dieCount()); } // idle pace, for the stats card
+  boardSteps() { return Math.max(1, Math.min(STEP_CAP, this.dieCount())); }
+  rollEvery() { return FILL ? this.dieMs() : this.dieMs() * this.boardSteps(); } // idle pace, for the stats card
   // One step; false if the board can't take it yet (strip full, a score still showing, no die free to roll).
   step() {
     if (FILL) return this.rollNext();
-    const n = this.dieCount(); if (!n || this.meter >= n) return false;
+    const n = this.boardSteps(); if (!this.dieCount() || this.meter >= n) return false;
     this.meter = Math.min(n, Math.floor(this.meter) + 1); this.stripPulse = now; return true;
   }
   // Every die not held rolls together. The tumble shortens when flips come quickly.
@@ -672,14 +675,20 @@ class Board {
       if (!this.boardScored) this.showScore(this.score());   // a die left the board before its turn
       live.forEach(d => { d.rolled = false; this.setLit(d, false); }); this.boardScored = false;
     }
-    const d = this.cells.find(x => x && !x.rolled && !x.held); if (!d) return false;
+    // This step's dice: one per step, or more on a board with more dice than STEP_CAP (the remainder carries).
+    this.carry = (this.carry || 0) + live.length / this.boardSteps();
+    const k = Math.max(1, Math.floor(this.carry + 1e-9)); this.carry -= k;
+    const ds = this.cells.filter(x => x && !x.rolled && !x.held).slice(0, k); if (!ds.length) { this.carry = 0; return false; }
     const gap = now - (this.lastDie ?? -1e9); this.lastDie = now;
-    const dur = Math.round(Math.max(150, Math.min(320, gap * 1.5)));
-    const idx = rnd(6); d.faceIdx = idx; d.face = d.faceVals[idx]; d.rolled = true;
-    this.tumbleDie(d, idx, dur, 2, 1).then(last => { if (!last) return; this.setLit(d, d.rolled); SFX.land(.12); this.bumpDie(d); });
+    const dur = Math.round(Math.max(140, Math.min(320, gap * 1.6)));
+    let land = 0;
+    ds.forEach((d, j) => {
+      const idx = rnd(6), delay = j * 35; d.faceIdx = idx; d.face = d.faceVals[idx]; d.rolled = true; land = delay + dur;
+      this.tumbleDie(d, idx, dur, 2, 1, delay).then(last => { if (!last) return; this.setLit(d, d.rolled); SFX.thud(); this.bumpDie(d); });
+    });
     if (this.cells.every(x => !x || x.rolled)) {
-      this.boardScored = true; const res = this.score();
-      this.busyUntil = now + dur + SCORE_BEAT; wait(dur).then(() => this.showScore(res));
+      this.boardScored = true; this.carry = 0; const res = this.score();
+      this.busyUntil = now + land + SCORE_BEAT; wait(land).then(() => this.showScore(res));
     }
     return true;
   }
@@ -773,23 +782,25 @@ class Board {
     let p;
     const dt = now - this.lastTick; this.lastTick = now;
     if (this.mine) {
-      const n = this.dieCount();
+      const n = this.dieCount(), steps = this.boardSteps();
       if (FILL) {
-        if (now >= this.next && this.step()) this.next = now + this.dieMs();   // the timer's step waits out a score moment
+        // The timer's steps, caught up if frames run slow (at most 4 a frame); a score moment holds them.
+        for (let k = 0; k < 4 && now >= this.next && this.step(); k++) this.next = Math.max(this.next + this.dieMs(), now - this.dieMs());
         // Strip = how much of this board has rolled, plus the share of the die the timer is working on.
         const done = this.cells.filter(d => d && d.rolled).length;
         const part = now < this.busyUntil ? 0 : Math.min(1, Math.max(0, 1 - (this.next - now) / this.dieMs()));
         p = n ? Math.min(1, (done + (done < n ? part : 0)) / n) : 0;
       } else {
-        if (n) this.meter = Math.min(n, this.meter + dt / this.dieMs());   // the timer fills the strip too
-        if (n && this.meter >= n && now >= this.busyUntil && this.rollAll()) this.meter = 0;
-        p = n ? this.meter / n : 0;
+        if (n) this.meter = Math.min(steps, this.meter + dt / this.dieMs());   // the timer fills the strip too
+        if (n && this.meter >= steps && now >= this.busyUntil && this.rollAll()) this.meter = 0;
+        p = n ? this.meter / steps : 0;
         // The rim warms as the strip fills.
         const f = p * p; this.rim.material.emissive.setHex(0xffb000); this.rim.material.emissiveIntensity = f * .55;
       }
-      if (n !== this.notchN) {
-        this.notchN = n;
-        this.notches.forEach((m, k) => { m.visible = k < n - 1; m.position.x = -this.timerL / 2 + this.timerL * (k + 1) / Math.max(1, n); });
+      const notches = FILL ? n : steps;   // one notch per die (Roll each die) or per step (Roll the board)
+      if (notches !== this.notchN) {
+        this.notchN = notches;
+        this.notches.forEach((m, k) => { m.visible = k < notches - 1; m.position.x = -this.timerL / 2 + this.timerL * (k + 1) / Math.max(1, notches); });
       }
       const sb = now - (this.speedBlink ?? -1e9), blink = sb < 500 && Math.floor(sb / 83) % 2;
       const flash = blink ? 1 : .55 * Math.max(0, 1 - (now - (this.stripPulse ?? -1e9)) / 90);
@@ -803,6 +814,7 @@ class Board {
   }
 }
 
+const STEP_CAP = 24;      // most steps a board takes; past this many dice, a step rolls more than one
 const SCORE_BEAT = 450;   // ms a landed board's score holds the next flip/board back
 const SCORE_HOLD = 420;   // ms a score's "sum ×multiplier" bubbles show before turning into points
 const STRIP_FLASH = new THREE.Color(0xffffff);
@@ -818,19 +830,26 @@ function stepName(st) {
     : `${st.color[0].toUpperCase() + st.color.slice(1)} · ${st.cells.length} dice`;
 }
 const stepDot = st => st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
-// The ledger (board view): the last few hands, each scored group a line, and the total of everything it has listed.
-let ledgerTot = 0;
-// One hand per scored board; the ledger keeps the last LEDGER_HANDS.
+// The ledger (board view): the last few hands (one per scored board), each scored group a line. It keeps up to
+// LEDGER_HANDS, fewer when they don't fit, and the total is the sum of the lines shown.
 const LEDGER_HANDS = 5;
+let ledgerTot = 0;
 function ledgerHand() {
-  const h = document.createElement("div"); h.className = "hand"; linesEl().appendChild(h);
-  while (linesEl().children.length > LEDGER_HANDS) linesEl().firstChild.remove();
-  return h;
+  const h = document.createElement("div"); h.className = "hand"; h.sum = 0; linesEl().appendChild(h);
+  ledgerTrim(); return h;
 }
 function ledgerLine(st, hand) {
-  ledgerTot += st.pts; sheetTotal(ledgerTot);
   const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${fmt(st.sum)} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
   const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${stepDot(st)}<span>${stepName(st)}</span><span class="v">${v}</span>`; hand.appendChild(ln);
+  hand.sum += st.pts; ledgerTrim();
+}
+// Drop the oldest hands past LEDGER_HANDS or while the list overflows (board view only; the newest always stays).
+function ledgerTrim() {
+  const L = linesEl(), shown = document.body.classList.contains("boardView");
+  // (The list is bottom-anchored, so overflow spills off the top, where scrollHeight can't see it.)
+  const spills = () => shown && L.firstElementChild.getBoundingClientRect().top < L.getBoundingClientRect().top - 1;
+  while (L.children.length > 1 && (L.children.length > LEDGER_HANDS || spills())) L.firstChild.remove();
+  ledgerTot = [...L.children].reduce((t, h) => t + h.sum, 0); sheetTotal(ledgerTot);
 }
 function announce(html) {
   document.querySelectorAll(".pop.announce").forEach(n => n.remove());
@@ -936,7 +955,10 @@ function manualRoll() {
 function tapFrame() {
   const t = performance.now(), rate = DIE_RATE * tapBoost();
   while (taps.length && taps[0] < t - 1000) taps.shift();
-  if (rollBank >= 1 && t - lastTapRoll >= 1000 / rate && mine.step()) { rollBank -= 1; lastTapRoll = t; S.rollsManual++; }   // never touches the timer
+  // Work off waiting taps at the rate, caught up if frames run slow (at most 4 a frame); never touches the timer.
+  for (let k = 0; k < 4 && rollBank >= 1 && t - lastTapRoll >= 1000 / rate && mine.step(); k++) {
+    rollBank -= 1; lastTapRoll = Math.max(lastTapRoll + 1000 / rate, t - 1000 / rate); S.rollsManual++;
+  }
   // Heat: the step rate the current pace earns, eased so the button warms and cools smoothly.
   heat += ((taps.length ? Math.min(taps.length, rate) : 0) - heat) * Math.min(1, (taps.length ? .25 : .08));
   const btn = document.getElementById("rollBtn"); if (!btn) return;
