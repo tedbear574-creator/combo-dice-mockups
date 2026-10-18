@@ -243,7 +243,7 @@
     <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="luck"><span>Luck</span><b></b></div></div>
   <div class="sheet"><h4>SCORED</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
   <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
-  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll mode</button></div>
+  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll mode</button><button data-dev="full">Full board</button><button data-dev="maxspeed">Max speed</button></div>
   <!-- menu: open the collection book, shop and storage shelf (both views) -->
   <div class="menu" id="menu">
     <button data-menu="shop" class="mShop">R$</button>
@@ -1168,7 +1168,23 @@ document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click",
   if (k === "crate") openCrate(true);                                 // free crate (test)
   if (k === "shiny") { crateForce = { shiny: true }; openCrate(true); } // force a shiny pull (test)
   if (k === "sound") { AC.on = !AC.on; b.classList.toggle("on", AC.on); }
+  if (k === "full") devFullBoard();
+  if (k === "maxspeed") { while (canBuy("speed")) S.speedLv++; applyStats(); mine.speedFx(); SFX.rev(); flashStat("speed"); }
 }));
+// Test: grow to the biggest board, open every cell and fill the empty ones with mixed-rarity dice (not added to
+// the collection). The board stays this size until the next prestige sets it from the prestige level.
+function devFullBoard() {
+  if (N < PRESTIGE.maxN) {
+    const oldN = N; boardToStorage(); mine.clearDice(false); N = PRESTIGE.maxN;
+    const colors = theirs.cells.filter(Boolean).map(d => ({ tier: d.tier, color: d.color }));
+    mine.resize(); theirs.resize();
+    colors.forEach(c => { const i = theirs.emptyCell(); if (i !== undefined) theirs.addDie(i, c, false); });
+    growFx(mine, oldN);
+  }
+  S.cells = N * N; mine.refreshLocks(); fillBoardFromStorage();
+  let i; while ((i = mine.emptyCell()) !== undefined) mine.addDie(i, { tier: [0, 0, 0, 1, 1, 2, 2, 3, 4][rnd(9)], color: CNAMES[rnd(5)] }, true);
+  applyStats(); renderStorage(); updateMenuCounts(); flashStat("dice"); SFX.sparkle();
+}
 
 // ================================================================ camera
 const camPos = new THREE.Vector3(0, 12, 39), camLook = new THREE.Vector3(0, 2, 0);
