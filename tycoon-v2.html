@@ -57,8 +57,12 @@
   .stats div span { opacity: .7; font-weight: 700; } .stats div b { color: #fff; transition: color .3s; }
   .stats div.flash b { color: #ffe27a; animation: bump .3s ease-out 2; }
   .sheet { position: absolute; top: 72px; right: 10px; width: 210px; background: #f6f0e1; color: #2a2238; border-radius: 12px; padding: 7px 10px; display: none; font-size: 12px; }
-  body.boardView .sheet { display: block; } body.boardView .dev { display: none; }
+  body.boardView .sheet { display: flex; flex-direction: column; } body.boardView .dev { display: none; }
   .sheet h4 { margin: 0 0 3px; font-size: 11px; letter-spacing: .1em; opacity: .55; }
+  /* Hands (one scored board each), newest at the bottom; when they overflow, the oldest clip off the top. */
+  #lines { display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+  .sheet .hand { flex: none; } .sheet .hand + .hand { border-top: 1px solid rgba(42,34,56,.13); margin-top: 3px; padding-top: 3px; }
+  .sheet .hand:empty { display: none; }
   .sheet .ln { display: flex; align-items: center; gap: 5px; padding: 2px 0; font-weight: 800; animation: writeIn .2s ease-out; }
   .sheet .ln i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
   .sheet .ln i.chain { background: #e0a800; transform: rotate(45deg) scale(.8); }
@@ -73,7 +77,7 @@
   .powers { position: absolute; right: 12px; bottom: 20px; display: flex; flex-direction: row; gap: 8px; align-items: center; z-index: 4; }
   body.boardView .powers { bottom: 66px; }
   body.boardView .sheet { max-height: calc(100vh - 230px); overflow: hidden; right: 64px; }
-  body.boardView .sheet .tot { position: sticky; bottom: -7px; background: #f6f0e1; padding-bottom: 7px; }
+  body.boardView .sheet .tot { flex: none; }
   .powers button { position: relative; width: 54px; height: 54px; border-radius: 50%; border: 0; overflow: hidden; color: #fff;
     background: rgba(22,16,44,.82); font: 900 10px "Trebuchet MS", sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,.3), inset 0 0 0 2px var(--pc,#fff);
     display: flex; align-items: center; justify-content: center; transition: box-shadow .2s, background .2s; }
@@ -688,13 +692,14 @@ class Board {
     const steps = res.steps; if (!steps.length) return;
     steps.forEach(st => { this.glow(st, SCORE_BEAT + 350); st.cells.forEach((i, n) => { const d = res.dice[i]; if (d && !d.tumbling) this.bumpDie(d, .12, 200, n * 25); }); });
     SFX.link(Math.min(8, Math.max(...steps.map(st => st.cells.length))));
-    this.live = steps.map(st => ({ st, el: this.groupPop(st), done: false }));
+    const hand = ledgerHand();
+    this.live = steps.map(st => ({ st, hand, el: this.groupPop(st), done: false }));
     this.live.forEach((e, k) => wait(SCORE_HOLD + k * 90).then(() => this.cashIn(e, 220, k === 0)));
   }
   // A bubble turns into its points (banked now), then flies to the total after flyIn ms.
   cashIn(e, flyIn, sound) {
     if (e.done) return; e.done = true;
-    const st = e.st; earn(st.pts); ledgerLine(st);
+    const st = e.st; earn(st.pts); ledgerLine(st, e.hand);
     if (!e.el) return;
     if (st.kind !== "loose") { e.el.classList.add("res"); e.el.textContent = fmt(st.pts); }
     const fly = () => flyEl(e.el, sound ? 4 : -1, null);
@@ -813,13 +818,19 @@ function stepName(st) {
     : `${st.color[0].toUpperCase() + st.color.slice(1)} · ${st.cells.length} dice`;
 }
 const stepDot = st => st.kind === "chain" ? `<i class="chain"></i>` : `<i style="background:${st.kind === "loose" ? "#9aa6c4" : (COLORS[st.color] || "#bda7ff")}"></i>`;
-// The ledger (board view): every scored group, newest at the bottom, and the total of everything it has listed.
+// The ledger (board view): the last few hands, each scored group a line, and the total of everything it has listed.
 let ledgerTot = 0;
-function ledgerLine(st) {
+// One hand per scored board; the ledger keeps the last LEDGER_HANDS.
+const LEDGER_HANDS = 5;
+function ledgerHand() {
+  const h = document.createElement("div"); h.className = "hand"; linesEl().appendChild(h);
+  while (linesEl().children.length > LEDGER_HANDS) linesEl().firstChild.remove();
+  return h;
+}
+function ledgerLine(st, hand) {
   ledgerTot += st.pts; sheetTotal(ledgerTot);
   const v = st.kind === "loose" ? `<b>${fmt(st.pts)}</b>` : `${fmt(st.sum)} × ${fmtMult(st.mult)} = <b>${fmt(st.pts)}</b>`;
-  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${stepDot(st)}<span>${stepName(st)}</span><span class="v">${v}</span>`; linesEl().appendChild(ln);
-  while (linesEl().children.length > 9) linesEl().firstChild.remove();
+  const ln = document.createElement("div"); ln.className = "ln"; ln.innerHTML = `${stepDot(st)}<span>${stepName(st)}</span><span class="v">${v}</span>`; hand.appendChild(ln);
 }
 function announce(html) {
   document.querySelectorAll(".pop.announce").forEach(n => n.remove());
