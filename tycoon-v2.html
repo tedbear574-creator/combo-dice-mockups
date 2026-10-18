@@ -248,7 +248,7 @@
     <div data-s="speed"><span>Rolls</span><b></b></div><div data-s="luck"><span>Luck</span><b></b></div></div>
   <div class="sheet"><h4>SCORED</h4><div id="lines"></div><div class="tot"><span>Total</span><span id="sheetTot">0</span></div></div>
   <div class="total" id="total"><span class="plv" id="totalPLv" style="display:none">✦0</span><b id="pts">0</b><small id="rate">0 / sec</small></div>
-  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll mode</button><button data-dev="full">Full board</button><button data-dev="maxspeed">Max speed</button></div>
+  <div class="dev"><button data-dev="cash">+5,000</button><button data-dev="crate">Crate</button><button data-dev="shiny">Shiny</button><button data-dev="sound" class="on">Sound</button><button data-dev="mode">Roll: board</button><button data-dev="full">Full board</button><button data-dev="maxspeed">Max speed</button></div>
   <!-- menu: open the collection book, shop and storage shelf (both views) -->
   <div class="menu" id="menu">
     <button data-menu="shop" class="mShop">R$</button>
@@ -458,10 +458,12 @@ function dieMaterials(spec) {
 let now = performance.now();
 // ?speed=N runs game time N times faster (rolls, timers, animations); walking stays real-time.
 const SPEED = Math.max(.1, +new URLSearchParams(location.search).get("speed") || 1);
-// Roll modes (playtest variants). Default (?roll=all): rolls fill the strip and a full strip flips the whole
-// board. ?roll=fill: each roll rolls the next die; the board scores once every die has rolled.
-const ROLL = new URLSearchParams(location.search).get("roll") || "all";
-const FILL = ROLL === "fill";
+// Roll modes (playtest variants, swapped live by the Roll mode dev button). "all" (default): rolls fill the strip
+// and a full strip flips the whole board. "fill": each roll rolls the next die; the board scores once every die
+// has rolled. ?roll= picks the mode on load.
+let ROLL = new URLSearchParams(location.search).get("roll") === "fill" ? "fill" : "all";
+let FILL = ROLL === "fill";
+const MODE_NAMES = { all: "Roll: board", fill: "Roll: each die" };
 const tweens = [];
 function tween(dur, fn, delay = 0) { return new Promise(res => tweens.push({ t0: now + delay, dur: Math.max(1, dur), fn, res })); }
 const wait = ms => tween(ms, () => {});
@@ -686,13 +688,19 @@ class Board {
     let land = 0;
     ds.forEach((d, j) => {
       const idx = rnd(6), delay = j * 35; d.faceIdx = idx; d.face = d.faceVals[idx]; d.rolled = true; land = delay + dur;
-      this.tumbleDie(d, idx, dur, 2, 1, delay).then(last => { if (!last) return; this.setLit(d, d.rolled); SFX.thud(); this.bumpDie(d); });
+      this.tumbleDie(d, idx, dur, 2, 1, delay).then(last => { if (!last) return; this.setLit(d, !FILL || d.rolled); SFX.thud(); this.bumpDie(d); });
     });
     if (this.cells.every(x => !x || x.rolled)) {
       this.boardScored = true; this.carry = 0; const res = this.score();
       this.busyUntil = now + land + SCORE_BEAT; wait(land).then(() => this.showScore(res));
     }
     return true;
+  }
+  // The roll mode changed: bank any score still showing and start a fresh board in the new mode (dice stay put).
+  modeChanged() {
+    this.hurry(); this.meter = 0; this.carry = 0; this.boardScored = false; this.notchN = -1;
+    this.next = now + this.dieMs(); this.rim.material.emissiveIntensity = 0;
+    for (const d of this.cells) if (d) { d.rolled = false; this.setLit(d, !FILL); }
   }
   // A landed board's score: every group lights up at once with its "sum ×multiplier" bubble. After a moment each
   // turns into its points (smallest first) and flies to the total, writing its ledger line. If the next score
@@ -1198,7 +1206,7 @@ document.querySelector("[data-act=walk]").addEventListener("click", leaveBoard);
 document.getElementById("rollBtn").addEventListener("click", manualRoll);
 document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.dev;
-  if (k === "mode") { const q = new URLSearchParams(location.search); const M = ["all", "fill"]; q.set("roll", M[(M.indexOf(ROLL) + 1) % M.length]); location.search = q.toString(); return; }
+  if (k === "mode") setRollMode(FILL ? "all" : "fill");
   if (k === "cash") { S.points += 5000; SFX.coin(); }
   if (k === "crate") openCrate(true);                                 // free crate (test)
   if (k === "shiny") { crateForce = { shiny: true }; openCrate(true); } // force a shiny pull (test)
@@ -1206,6 +1214,14 @@ document.querySelectorAll("[data-dev]").forEach(b => b.addEventListener("click",
   if (k === "full") devFullBoard();
   if (k === "maxspeed") { while (canBuy("speed")) S.speedLv++; applyStats(); mine.speedFx(); SFX.rev(); flashStat("speed"); }
 }));
+// Test: swap the roll mode in place (progress kept); the URL keeps it for a reload.
+function setRollMode(m) {
+  ROLL = m; FILL = m === "fill"; mine.modeChanged();
+  document.querySelector("[data-dev=mode]").textContent = MODE_NAMES[m];
+  const q = new URLSearchParams(location.search); if (FILL) q.set("roll", "fill"); else q.delete("roll");
+  history.replaceState(null, "", location.pathname + (q.size ? "?" + q : ""));
+}
+document.querySelector("[data-dev=mode]").textContent = MODE_NAMES[ROLL];
 // Test: grow to the biggest board, open every cell and fill the empty ones with mixed-rarity dice (not added to
 // the collection). The board stays this size until the next prestige sets it from the prestige level.
 function devFullBoard() {
@@ -1798,7 +1814,7 @@ window.T = { mine, theirs, S, player, enterBoard, leaveBoard, buy,
   // storage / collection / shop
   renderStorage, openCollection, openShop, openBag, buyShopItem, SHOP, collectionMult, luck, sellValue, mergeSpecs,
   // active play + goals
-  manualRoll, ROLL, FILL, planArrangement, arrangeBoard, get rollBank() { return rollBank; }, get ledgerTot() { return ledgerTot; }, GOALS, get goalIdx() { return S.goalIdx; },
+  manualRoll, get ROLL() { return ROLL; }, get FILL() { return FILL; }, setRollMode, planArrangement, arrangeBoard, get rollBank() { return rollBank; }, get ledgerTot() { return ledgerTot; }, GOALS, get goalIdx() { return S.goalIdx; },
   // powers
   POWERS, buffs, pstate, usePower, addBuff, stats, mikey,
   // prestige
