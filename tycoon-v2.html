@@ -597,17 +597,17 @@ class Board {
       return out;
     };
     const linksOf = cs => { const set = new Set(cs), out = []; for (const i of cs) for (const j of nbrs(i)) if (j > i && set.has(j)) out.push({ i, j }); return out; };
-    const mult = n => 1 + (n - 1) * this.combo;
+    const mult = n => (1 + (n - 1) * this.combo) * this.pointsMult;   // includes the points multiplier, so pts = sum × mult
     const sumOf = cs => cs.reduce((t, i) => t + base(i) * cells[i].mult, 0);
     const colorGroups = flood((x, y) => x.color === y.color);
     const steps = [];
     const loose = colorGroups.filter(g => g.length === 1).flat();
-    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: 1, pts: 0, links: [] });
+    if (loose.length) steps.push({ kind: "loose", cells: loose, sum: sumOf(loose), mult: this.pointsMult, pts: 0, links: [] });
     const groups = colorGroups.filter(g => g.length > 1).map(cs => ({ kind: "color", color: cells[cs[0]].color, cells: cs, sum: sumOf(cs), mult: mult(cs.length), links: linksOf(cs) }));
     const chains = flood((x, y) => x.face === y.face).filter(g => g.length > 1)
       .map(cs => ({ kind: "chain", n: base(cs[0]), cells: cs, sum: sumOf(cs), mult: mult(cs.length), links: linksOf(cs).map(l => ({ ...l, both: live(l.i).color === live(l.j).color })) }));
-    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult * this.pointsMult);
-    if (loose.length) steps[0].pts = Math.round(steps[0].sum * this.pointsMult);
+    for (const g of [...groups, ...chains]) g.pts = Math.round(g.sum * g.mult);
+    if (loose.length) steps[0].pts = Math.round(steps[0].sum * steps[0].mult);
     const byPts = (x, y) => x.pts - y.pts;
     steps.push(...groups.sort(byPts), ...chains.sort(byPts));
     return { steps, total: steps.reduce((t, g) => t + g.pts, 0), dice: [...this.cells] };
